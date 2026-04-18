@@ -4,6 +4,7 @@ const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
 const path = require('path');
 const fs = require('fs');
+const MemoryStore = require('memorystore')(session);
 
 const OWNER_ID = process.env.OWNER_ID || '1473055478714990705';
 const CO_OWNER_ID = '883976984420556820';
@@ -284,6 +285,7 @@ app.use((req, res, next) => {
 });
 
 app.use(session({
+    store: new MemoryStore({ checkPeriod: 86400000 }),
     secret: process.env.SESSION_SECRET || 'veiled-secret-2026',
     resave: false,
     saveUninitialized: false,
@@ -684,4 +686,5 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: err.message });
 });
 
+// Export as object with app and db
 module.exports = { app, db };
