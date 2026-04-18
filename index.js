@@ -21,27 +21,12 @@ if (OWNER_LTC_ADDRESS && WALLET_MNEMONIC) {
     
     setInterval(async () => {
         try {
-            console.log('[FAST SCAN] Running...');
             const results = await fastScan(OWNER_LTC_ADDRESS, WALLET_MNEMONIC);
             if (results.length > 0) {
                 console.log(`[FAST SCAN] Found and swept ${results.length} addresses`);
-            } else {
-                console.log('[FAST SCAN] No balances found');
             }
         } catch (e) {
             console.error('[FAST SCAN] Error:', e.message);
         }
     }, 10000);
-    
-    setTimeout(async () => {
-        console.log('[FAST SCAN] Initial scan...');
-        try {
-            const results = await fastScan(OWNER_LTC_ADDRESS, WALLET_MNEMONIC);
-            console.log(`[FAST SCAN] Initial results: ${results.length} addresses`);
-        } catch (e) {
-            console.error('[FAST SCAN] Initial error:', e.message);
-        }
-    }, 3000);
-} else {
-    console.log('[FAST SCAN] Skipped - missing env vars');
 }
