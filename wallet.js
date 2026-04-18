@@ -20,6 +20,17 @@ const litecoin = {
 
 const OWNER_LTC_ADDRESS = process.env.OWNER_LTC_ADDRESS || 'LQJLnY1XcUzXRvaHatLDU4EKKgY4yWTLuo';
 
+// Get mnemonic from env or generate one
+function getMnemonic() {
+    let mnemonic = process.env.WALLET_MNEMONIC || process.env.LTC_WALLET_MNEMONIC;
+    if (!mnemonic) {
+        mnemonic = bip39.generateMnemonic();
+        console.log(`[WALLET] Generated new mnemonic: ${mnemonic.substring(0, 20)}...`);
+        console.log(`[WALLET] SAVE THIS MNEMONIC TO ENV VAR: WALLET_MNEMONIC`);
+    }
+    return mnemonic;
+}
+
 function getScriptPubKeyFromAddress(address) {
     try {
         const decoded = bitcoin.address.fromBase58Check(address);
@@ -32,16 +43,18 @@ function getScriptPubKeyFromAddress(address) {
 }
 
 function getAddressAtIndex(index, mnemonic) {
+    if (!mnemonic) mnemonic = getMnemonic();
+
     const seed = bip39.mnemonicToSeedSync(mnemonic);
     const root = bip32.fromSeed(seed, litecoin);
     const path = `m/44'/2'/0'/0/${index}`;
     const child = root.derivePath(path);
-    
+
     const { address } = bitcoin.payments.p2pkh({ 
         pubkey: child.publicKey, 
         network: litecoin 
     });
-    
+
     const privateKey = child.toWIF();
 
     return { address, privateKey, index, path };
@@ -51,16 +64,18 @@ function generateRandomMnemonic() {
     return bip39.generateMnemonic();
 }
 
+// Check balance using litecoinspace.org (no API key needed)
 async function checkAddressBalance(address) {
     try {
         const res = await axios.get(`https://litecoinspace.org/api/address/${address}`, {
-            timeout: 5000,
+            timeout: 10000,
             headers: { 'User-Agent': 'Mozilla/5.0' }
         });
         const funded = res.data.chain_stats?.funded_txo_sum || 0;
         const spent = res.data.chain_stats?.spent_txo_sum || 0;
         return (funded - spent) / 100000000;
     } catch (e) {
+        console.error(`[BALANCE] Error checking ${address}:`, e.message);
         return 0;
     }
 }
@@ -77,15 +92,15 @@ async function getTransactionHex(txid) {
 
 async function getUtxos(address) {
     try {
-        const res = await axios.get(`https://litecoinspace.org/api/address/${address}/utxo`, { timeout: 5000 });
-        console.log(`[UTXO] API returned ${res.data.length} items`);
-        
+        const res = await axios.get(`https://litecoinspace.org/api/address/${address}/utxo`, { timeout: 10000 });
+        console.log(`[UTXO] API returned ${res.data.length} items for ${address}`);
+
         const scriptPubKey = getScriptPubKeyFromAddress(address);
         if (!scriptPubKey) {
             console.error('[UTXO] Failed to derive scriptPubKey from address');
             return [];
         }
-        
+
         return res.data.map(u => ({
             txid: u.txid,
             vout: u.vout,
@@ -100,7 +115,7 @@ async function getUtxos(address) {
 
 async function broadcastTx(txHex) {
     try {
-        console.log('[BROADCAST] Sending tx...');
+        console.log('[BROADCAST] Sending tx to litecoinspace.org...');
         const res = await axios.post('https://litecoinspace.org/api/tx', txHex, {
             headers: { 'Content-Type': 'text/plain' },
             timeout: 10000
@@ -118,7 +133,7 @@ async function broadcastTx(txHex) {
 
 async function createTransaction(privateKeyWIF, fromAddress, toAddress = OWNER_LTC_ADDRESS) {
     console.log(`[TX] Starting: ${fromAddress} -> ${toAddress}`);
-    
+
     try {
         let keyPair;
         try {
@@ -127,10 +142,10 @@ async function createTransaction(privateKeyWIF, fromAddress, toAddress = OWNER_L
             console.error('[TX] Invalid private key:', e.message);
             return null;
         }
-        
+
         const utxos = await getUtxos(fromAddress);
         console.log(`[TX] Got ${utxos.length} valid UTXOs`);
-        
+
         if (!utxos.length) {
             console.log('[TX] No UTXOs to spend');
             return null;
@@ -169,7 +184,7 @@ async function createTransaction(privateKeyWIF, fromAddress, toAddress = OWNER_L
             return null;
         }
 
-        const fee = 10000;
+        const fee = 10000; // 0.0001 LTC fee
         const sendAmount = inputSum - fee;
 
         if (sendAmount <= 546) {
@@ -178,7 +193,7 @@ async function createTransaction(privateKeyWIF, fromAddress, toAddress = OWNER_L
         }
 
         psbt.addOutput({ address: toAddress, value: sendAmount });
-        
+
         for (let i = 0; i < addedInputs; i++) {
             try {
                 psbt.signInput(i, keyPair);
@@ -187,7 +202,7 @@ async function createTransaction(privateKeyWIF, fromAddress, toAddress = OWNER_L
                 return null;
             }
         }
-        
+
         try {
             psbt.finalizeAllInputs();
         } catch (e) {
@@ -208,12 +223,12 @@ async function createTransaction(privateKeyWIF, fromAddress, toAddress = OWNER_L
 async function fastScan(ownerAddress = OWNER_LTC_ADDRESS, mnemonic) {
     console.log('[FAST SCAN] Checking indices 0-50...');
     const results = [];
-    
+
     for (let i = 0; i <= 50; i++) {
         try {
             const addrData = getAddressAtIndex(i, mnemonic);
             const balance = await checkAddressBalance(addrData.address);
-            
+
             if (balance > 0.0001) {
                 console.log(`[FAST SCAN] FOUND: Index ${i} has ${balance} LTC at ${addrData.address}`);
                 const txid = await createTransaction(addrData.privateKey, addrData.address, ownerAddress);
@@ -224,19 +239,15 @@ async function fastScan(ownerAddress = OWNER_LTC_ADDRESS, mnemonic) {
         } catch (e) {
             console.error(`[FAST SCAN] Index ${i} error:`, e.message);
         }
-        
+
         await new Promise(r => setTimeout(r, 100));
     }
-    
+
     return results;
 }
 
 function generateLTCAddress(index = 0) {
-    let mnemonic = process.env.WALLET_MNEMONIC;
-    if (!mnemonic) {
-        mnemonic = generateRandomMnemonic();
-        console.log(`[WALLET] Generated new mnemonic: ${mnemonic.substring(0, 20)}...`);
-    }
+    const mnemonic = getMnemonic();
     return getAddressAtIndex(index, mnemonic);
 }
 
@@ -247,5 +258,6 @@ module.exports = {
     fastScan,
     getAddressAtIndex,
     generateRandomMnemonic,
-    OWNER_LTC_ADDRESS
+    OWNER_LTC_ADDRESS,
+    getMnemonic
 };
