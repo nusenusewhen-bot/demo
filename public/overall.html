@@ -687,9 +687,9 @@
               <li><span class="check">&#x2713;</span>1 Discord Account</li>
               <li><span class="check">&#x2713;</span>Channel messaging</li>
               <li><span class="check">&#x2713;</span>Image attachments</li>
+              <li><span class="check">&#x2713;</span>Send all at once</li>
               <li><span class="xmark">&#x2717;</span>Auto-reply</li>
               <li><span class="xmark">&#x2717;</span>Server joiner</li>
-              <li><span class="xmark">&#x2717;</span>Send all at once</li>
             </ul>
             <button class="btn" onclick="startPurchase('v1')">Buy v1</button>
           </article>
@@ -705,8 +705,8 @@
               <li><span class="check">&#x2713;</span>Channel messaging</li>
               <li><span class="check">&#x2713;</span>Image attachments</li>
               <li><span class="check">&#x2713;</span>Auto-reply to DMs</li>
+              <li><span class="check">&#x2713;</span>Send all at once</li>
               <li><span class="xmark">&#x2717;</span>Server joiner</li>
-              <li><span class="xmark">&#x2717;</span>Send all at once</li>
             </ul>
             <button class="btn" onclick="startPurchase('v2')">Buy v2</button>
           </article>
@@ -1158,12 +1158,10 @@
         autoReplyToggle.parentElement.title = 'Upgrade to v2 or higher for auto-reply';
       }
 
-      // Send all at once - v3+
+      // Send all at once - all tiers
       const sendAllToggle = document.getElementById('sendAllToggle');
       if(sendAllToggle && !perms.canSendAll){
-        sendAllToggle.parentElement.style.opacity = '0.5';
-        sendAllToggle.style.pointerEvents = 'none';
-        sendAllToggle.parentElement.title = 'Upgrade to v3 for send all at once';
+        // All tiers have send all, so no lock needed
       }
     }
 
