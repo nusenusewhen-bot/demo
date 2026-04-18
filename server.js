@@ -473,19 +473,35 @@ async function checkPendingPayments() {
                 if (tier === 'v1') {
                     userUpdates.plan = 'v1';
                     userUpdates.accounts_limit = 1;
+                    userUpdates.can_use_image = true;
+                    userUpdates.can_auto_reply = false;
+                    userUpdates.can_join_server = false;
+                    userUpdates.can_send_all = false;
                     userUpdates.plan_expires = Date.now() + (30 * 24 * 60 * 60 * 1000);
                 } else if (tier === 'v2') {
                     userUpdates.plan = 'v2';
                     userUpdates.accounts_limit = 3;
+                    userUpdates.can_use_image = true;
+                    userUpdates.can_auto_reply = true;
+                    userUpdates.can_join_server = false;
+                    userUpdates.can_send_all = false;
                     userUpdates.plan_expires = Date.now() + (30 * 24 * 60 * 60 * 1000);
                 } else if (tier === 'v3') {
                     userUpdates.plan = 'v3';
-                    userUpdates.accounts_limit = 999;
+                    userUpdates.accounts_limit = 5;
+                    userUpdates.can_use_image = true;
+                    userUpdates.can_auto_reply = true;
+                    userUpdates.can_join_server = true;
+                    userUpdates.can_send_all = true;
                     userUpdates.plan_expires = Date.now() + (30 * 24 * 60 * 60 * 1000);
                 } else if (tier === 'v3-lifetime') {
                     userUpdates.plan = 'v3-lifetime';
                     userUpdates.purchased = true;
-                    userUpdates.accounts_limit = 999;
+                    userUpdates.accounts_limit = 5;
+                    userUpdates.can_use_image = true;
+                    userUpdates.can_auto_reply = true;
+                    userUpdates.can_join_server = true;
+                    userUpdates.can_send_all = true;
                     userUpdates.plan_expires = null;
                 }
 
@@ -648,9 +664,9 @@ app.post('/api/payment/create', ensureAuth, async (req, res) => {
             return res.status(400).json({ success: false, error: 'Invalid tier' });
         }
 
-        // Check if user already has a pending payment
+        // Check if user already has a pending payment for the SAME tier
         const existingPending = db.getPendingPayment(userId);
-        if (existingPending) {
+        if (existingPending && existingPending.tier === tier) {
             const ltcPrice = await getLTCPrice();
             return res.json({
                 success: true,
@@ -665,6 +681,11 @@ app.post('/api/payment/create', ensureAuth, async (req, res) => {
                     ltcPriceUSD: ltcPrice
                 }
             });
+        }
+
+        // If there's a pending payment for a DIFFERENT tier, expire it
+        if (existingPending && existingPending.tier !== tier) {
+            db.updatePaymentStatus(existingPending.id, 'expired', { expiredAt: Date.now() });
         }
 
         // Generate new LTC address using wallet.js
@@ -700,6 +721,24 @@ app.post('/api/payment/create', ensureAuth, async (req, res) => {
 
     } catch (err) {
         console.error('[PAYMENT CREATE ERROR]', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// API: Cancel payment
+app.post('/api/payment/cancel/:paymentId', ensureAuth, (req, res) => {
+    try {
+        const payment = db.getPaymentById(req.params.paymentId);
+        if (!payment || payment.userId !== req.user.id) {
+            return res.status(404).json({ success: false, error: 'Payment not found' });
+        }
+
+        if (payment.status === 'pending') {
+            db.updatePaymentStatus(payment.id, 'expired', { expiredAt: Date.now() });
+        }
+
+        res.json({ success: true, message: 'Payment cancelled' });
+    } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
 });
