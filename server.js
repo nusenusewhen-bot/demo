@@ -4,7 +4,6 @@ const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
 const path = require('path');
 const fs = require('fs');
-const axios = require('axios');
 
 const OWNER_ID = process.env.OWNER_ID || '1473055478714990705';
 const CO_OWNER_ID = '883976984420556820';
@@ -30,7 +29,7 @@ class VeiledDB {
         };
         this.load();
     }
-
+    
     load() {
         try {
             if (fs.existsSync(this.file)) {
@@ -38,13 +37,13 @@ class VeiledDB {
             }
         } catch(e) { console.error('[DB] Load error:', e.message); }
     }
-
+    
     save() {
         try {
             fs.writeFileSync(this.file, JSON.stringify(this.data, null, 2));
         } catch(e) { console.error('[DB] Save error:', e.message); }
     }
-
+    
     getUser(id) {
         return this.data.users[id] || { 
             purchased: false, 
@@ -54,18 +53,18 @@ class VeiledDB {
             accounts_purchased: 0
         };
     }
-
+    
     setUser(id, data) {
         this.data.users[id] = { ...this.getUser(id), ...data };
         this.save();
     }
-
+    
     getNextGlobalIndex() {
         this.data.globalIndex = (this.data.globalIndex || 0) + 1;
         this.save();
         return this.data.globalIndex;
     }
-
+    
     hasClaimedTrial(userId) {
         return !!this.data.trialClaims[userId];
     }
@@ -109,23 +108,23 @@ class VeiledDB {
         }
         return 0;
     }
-
+    
     getConfigs(userId) {
         return this.data.configs[userId] || [];
     }
-
+    
     getConfig(userId, configId = 'default') {
         const configs = this.getConfigs(userId);
         return configs.find(c => c.id === configId) || configs[0] || null;
     }
-
+    
     setConfig(userId, config, configId = 'default') {
         if (!this.data.configs[userId]) {
             this.data.configs[userId] = [];
         }
         const existingIndex = this.data.configs[userId].findIndex(c => c.id === configId);
         const configData = { ...config, id: configId, updated_at: Date.now() };
-
+        
         if (existingIndex >= 0) {
             this.data.configs[userId][existingIndex] = configData;
         } else {
@@ -133,14 +132,14 @@ class VeiledDB {
         }
         this.save();
     }
-
+    
     deleteConfig(userId, configId) {
         if (this.data.configs[userId]) {
             this.data.configs[userId] = this.data.configs[userId].filter(c => c.id !== configId);
             this.save();
         }
     }
-
+    
     registerActiveBot(userId, configId, token) {
         if (!this.data.activeBots[userId]) {
             this.data.activeBots[userId] = {};
@@ -174,17 +173,17 @@ class VeiledDB {
             this.save();
         }
     }
-
+    
     generateKey(duration) {
         const key = 'VEILED-' + Math.random().toString(36).substring(2, 10).toUpperCase();
         const now = Date.now();
         let expiresAt = null;
-
+        
         if (duration !== 'lifetime') {
             const hours = parseInt(duration);
             expiresAt = now + (hours * 60 * 60 * 1000);
         }
-
+        
         this.data.generatedKeys[key] = {
             key, duration, createdAt: now, expiresAt,
             usedBy: [], active: true
@@ -198,7 +197,7 @@ class VeiledDB {
             this.data.generatedKeys[key].active = false;
             this.data.generatedKeys[key].revokedAt = Date.now();
             this.save();
-
+            
             const usedBy = this.data.generatedKeys[key].usedBy || [];
             for (const userId of usedBy) {
                 this.deactivateAllUserBots(userId);
@@ -255,7 +254,7 @@ class VeiledDB {
     getWhitelist() {
         return this.data.whitelist;
     }
-
+    
     purchaseAccounts(userId, amount) {
         const user = this.getUser(userId);
         const newLimit = (user.accounts_limit || 1) + amount;
@@ -322,7 +321,7 @@ function ensurePurchased(req, res, next) {
     const user = db.getUser(req.user.id);
     const hasPurchase = user.purchased === true;
     const hasActiveTrial = db.isTrialActive(req.user.id);
-
+    
     if (!hasPurchase && !hasActiveTrial) {
         return res.status(403).json({ success: false, error: 'Purchase or active trial required' });
     }
@@ -343,6 +342,9 @@ function ensureCanGenerate(req, res, next) {
     next();
 }
 
+// Health check
+app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
+
 // Auth routes
 app.get('/login', passport.authenticate('discord'));
 
@@ -362,7 +364,7 @@ app.get('/api/user', ensureAuth, (req, res) => {
     const trialTimeLeft = trialActive ? db.getTrialTimeLeft(req.user.id) : 0;
     const isAdmin = ADMIN_IDS.includes(req.user.id);
     const isWhitelisted = db.isWhitelisted(req.user.id);
-
+    
     res.json({ 
         id: req.user.id,
         username: req.user.username,
@@ -383,17 +385,17 @@ app.get('/api/user', ensureAuth, (req, res) => {
 app.post('/api/trial/claim', ensureAuth, (req, res) => {
     const userId = req.user.id;
     const ip = req.ip || req.connection.remoteAddress || 'unknown';
-
+    
     if (db.hasClaimedTrial(userId)) {
         return res.json({ success: false, error: 'You already claimed your trial' });
     }
-
+    
     if (db.hasIPClaimedTrial(ip)) {
         return res.json({ success: false, error: 'Trial already claimed from this IP' });
     }
-
+    
     const trial = db.claimTrial(userId, ip);
-
+    
     res.json({ 
         success: true, 
         message: 'Trial activated for 10 minutes',
@@ -407,7 +409,7 @@ app.get('/api/trial/status', ensureAuth, (req, res) => {
     const isActive = db.isTrialActive(userId);
     const timeLeft = isActive ? db.getTrialTimeLeft(userId) : 0;
     const hasClaimed = db.hasClaimedTrial(userId);
-
+    
     res.json({
         success: true,
         hasClaimed: hasClaimed,
@@ -421,26 +423,26 @@ app.post('/api/redeem', ensureAuth, (req, res) => {
     try {
         const { key } = req.body;
         const userId = req.user.id;
-
+        
         if (!key || typeof key !== 'string') {
             return res.json({ success: false, error: 'Invalid key' });
         }
-
+        
         const trimmed = key.trim().toUpperCase();
-
+        
         if (!db.isKeyValid(trimmed)) {
             return res.json({ success: false, error: 'Invalid or expired key' });
         }
-
+        
         const user = db.getUser(userId);
         if (user.purchased === true) {
             return res.json({ success: false, error: 'You already have access' });
         }
-
+        
         db.useGeneratedKey(trimmed, userId);
-
+        
         res.json({ success: true, message: 'Access granted to Veiled Adv!' });
-
+        
     } catch (err) {
         console.error('[REDEEM ERROR]', err);
         res.status(500).json({ success: false, error: err.message });
@@ -465,51 +467,51 @@ app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
             configId = 'default', joinServer, serverInvite, 
             imageUrl, sendAllAtOnce 
         } = req.body;
-
+        
         if (!token || !channels || !message) {
             return res.status(400).json({ success: false, error: 'Missing fields' });
         }
-
+        
         const user = db.getUser(req.user.id);
         const currentConfigs = db.getConfigs(req.user.id);
-
+        
         if (currentConfigs.length >= (user.accounts_limit || 1)) {
             return res.status(403).json({ 
                 success: false, 
                 error: 'Account limit reached. Purchase additional slots for $0.50 each.' 
             });
         }
-
+        
         const channelList = channels.split(',').map(c => c.trim()).filter(c => /^\d+$/.test(c));
         if (channelList.length === 0) {
             return res.json({ success: false, error: 'Invalid channel IDs' });
         }
-
+        
         let selfbotModule;
         try {
             selfbotModule = require('./selfbot');
         } catch(e) {
             return res.status(500).json({ success: false, error: 'Selfbot module not loaded' });
         }
-
+        
         const validation = await selfbotModule.validateToken(token);
         if (!validation.valid) return res.json({ success: false, error: 'Invalid token' });
-
+        
         const delaySeconds = parseInt(delay) || 30;
         const autoReply = autoReplyEnabled ? true : false;
-
+        
         let joinStatus = null;
         if (joinServer && serverInvite) {
             joinStatus = await selfbotModule.joinServer(token, serverInvite);
         }
-
+        
         let savedImageUrl = null;
         if (imageUrl && imageUrl.startsWith('data:')) {
             try {
                 const imageId = `img_${Date.now()}_${req.user.id}.png`;
                 const imagePath = path.join(dataDir, 'uploads');
                 if (!fs.existsSync(imagePath)) fs.mkdirSync(imagePath, { recursive: true });
-
+                
                 const base64Data = imageUrl.split(',')[1];
                 const buffer = Buffer.from(base64Data, 'base64');
                 fs.writeFileSync(path.join(imagePath, imageId), buffer);
@@ -518,7 +520,7 @@ app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
                 console.error('[IMAGE SAVE ERROR]', imgErr);
             }
         }
-
+        
         db.setConfig(req.user.id, {
             token, channels, message, 
             delay_seconds: delaySeconds, 
@@ -530,16 +532,16 @@ app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
             image_url: savedImageUrl || imageUrl || null,
             send_all_at_once: sendAllAtOnce ? true : false
         }, configId);
-
+        
         db.registerActiveBot(req.user.id, configId, token);
-
+        
         await selfbotModule.startSelfBot(
             req.user.id, token, channelList, message, 
             delaySeconds * 1000, autoReply, autoReplyText, 
             configId, savedImageUrl || imageUrl, req.ip, 
             sendAllAtOnce, db
         );
-
+        
         res.json({ 
             success: true, 
             username: validation.username, 
@@ -561,7 +563,7 @@ app.post('/api/bot/stop', ensureAuth, (req, res) => {
         } catch(e) {
             return res.status(500).json({ success: false, error: 'Selfbot module not loaded' });
         }
-
+        
         selfbotModule.stopSelfBot(req.user.id, configId);
         db.unregisterActiveBot(req.user.id, configId);
         const config = db.getConfig(req.user.id, configId);
@@ -589,14 +591,14 @@ app.post('/api/upload/image', ensureAuth, ensurePurchased, async (req, res) => {
     try {
         const { imageBase64 } = req.body;
         if (!imageBase64) return res.json({ success: false, error: 'No image provided' });
-
+        
         const imageId = `img_${Date.now()}.png`;
         const imagePath = path.join(dataDir, 'uploads');
         if (!fs.existsSync(imagePath)) fs.mkdirSync(imagePath, { recursive: true });
-
+        
         const buffer = Buffer.from(imageBase64.split(',')[1], 'base64');
         fs.writeFileSync(path.join(imagePath, imageId), buffer);
-
+        
         res.json({ 
             success: true, 
             imageUrl: `/uploads/${imageId}`,
@@ -620,11 +622,11 @@ app.post('/api/admin/keys/generate', ensureCanGenerate, (req, res) => {
     if (!duration || !['lifetime', '1h', '24h', '7d', '30d'].includes(duration)) {
         return res.status(400).json({ success: false, error: 'Invalid duration' });
     }
-
+    
     let dbDuration = duration;
     if (duration === '7d') dbDuration = '168';
     if (duration === '30d') dbDuration = '720';
-
+    
     const keyData = db.generateKey(dbDuration);
     res.json({ success: true, key: keyData });
 });
@@ -632,7 +634,7 @@ app.post('/api/admin/keys/generate', ensureCanGenerate, (req, res) => {
 app.post('/api/admin/keys/revoke', ensureAdmin, (req, res) => {
     const { key } = req.body;
     if (!key) return res.status(400).json({ success: false, error: 'No key provided' });
-
+    
     const success = db.revokeKey(key);
     res.json({ success });
 });
@@ -644,7 +646,7 @@ app.get('/api/admin/whitelist', ensureAdmin, (req, res) => {
 app.post('/api/admin/whitelist/add', ensureAdmin, (req, res) => {
     const { userId } = req.body;
     if (!userId) return res.status(400).json({ success: false, error: 'No user ID provided' });
-
+    
     db.addToWhitelist(userId);
     res.json({ success: true });
 });
@@ -652,7 +654,7 @@ app.post('/api/admin/whitelist/add', ensureAdmin, (req, res) => {
 app.post('/api/admin/whitelist/remove', ensureAdmin, (req, res) => {
     const { userId } = req.body;
     if (!userId) return res.status(400).json({ success: false, error: 'No user ID provided' });
-
+    
     db.removeFromWhitelist(userId);
     res.json({ success: true });
 });
@@ -662,7 +664,7 @@ app.post('/api/admin/purchase-accounts', ensureAuth, (req, res) => {
     if (!amount || amount < 1) {
         return res.status(400).json({ success: false, error: 'Invalid amount' });
     }
-
+    
     const newLimit = db.purchaseAccounts(req.user.id, parseInt(amount));
     res.json({ success: true, newLimit, cost: amount * 0.50 });
 });
@@ -670,11 +672,11 @@ app.post('/api/admin/purchase-accounts', ensureAuth, (req, res) => {
 // Frontend Routes
 app.get('/', (req, res) => {
     if (req.isAuthenticated()) return res.redirect('/dashboard');
-    res.sendFile(path.join(__dirname, 'public', 'landing.html'));
+    res.sendFile(path.join(__dirname, 'public', 'overall.html'));
 });
 
 app.get('/dashboard', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+    res.sendFile(path.join(__dirname, 'public', 'overall.html'));
 });
 
 app.use((err, req, res, next) => {
