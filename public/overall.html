@@ -1300,9 +1300,21 @@
       if(currentPaymentId) checkPaymentStatus(currentPaymentId);
     }
 
-    function cancelPayment(){
+    async function cancelPayment(){
       if(paymentCheckInterval) clearInterval(paymentCheckInterval);
       if(window.payTimerInterval) clearInterval(window.payTimerInterval);
+
+      // Call server to cancel the payment so it goes away forever
+      if(currentPaymentId){
+        try {
+          await fetch('/api/payment/cancel/' + currentPaymentId, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {'Content-Type':'application/json'}
+          });
+        } catch(e) {}
+      }
+
       currentPaymentId = null;
       document.getElementById('paymentActive').classList.add('hidden');
       document.getElementById('paymentHistoryView').classList.remove('hidden');
@@ -1339,9 +1351,9 @@
 
         const payments = data.payments || [];
 
-        // Check if there's an active pending payment to show
+        // Check if there's an active pending payment to show (only if user hasn't cancelled it)
         const activePending = payments.find(p => p.status === 'pending');
-        if(activePending && !currentPaymentId){
+        if(activePending && !currentPaymentId && activePending.tier){
           // Resume showing active payment
           showPaymentScreen({
             id: activePending.id,
