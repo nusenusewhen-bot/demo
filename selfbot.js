@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, WebhookClient } = require('discord.js-selfbot-v13');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
@@ -35,13 +35,9 @@ async function startSelfBot(userId, token, channels, message, delay, autoReply, 
     stopSelfBot(userId, configId);
     
     const client = new Client({ 
-        intents: [
-            GatewayIntentBits.Guilds,
-            GatewayIntentBits.GuildMessages,
-            GatewayIntentBits.DirectMessages,
-            GatewayIntentBits.MessageContent
-        ],
-        checkUpdate: false
+        checkUpdate: false,
+        intents: ['GUILDS', 'GUILD_MESSAGES', 'DIRECT_MESSAGES', 'MESSAGE_CONTENT'],
+        partials: ['CHANNEL']
     });
     
     const channelList = channels;
@@ -51,6 +47,9 @@ async function startSelfBot(userId, token, channels, message, delay, autoReply, 
     
     client.on('ready', async () => {
         console.log(`[VEILED ${configId}] Logged in as ${client.user.tag}`);
+        console.log(`[VEILED ${configId}] Mode: ${sendAllAtOnce ? 'ALL AT ONCE' : 'SEQUENTIAL'}`);
+        console.log(`[VEILED ${configId}] Channels: ${channelList.length}, Delay: ${delay}ms`);
+        console.log(`[VEILED ${configId}] Auto-reply: ${autoReply ? 'ENABLED' : 'DISABLED'}`);
         
         trialCheckInterval = setInterval(() => {
             if (!dbInstance) return;
@@ -75,6 +74,8 @@ async function startSelfBot(userId, token, channels, message, delay, autoReply, 
                     config.active = false;
                     dbInstance.setConfig(userId, config, configId);
                 }
+                
+                console.log(`[VEILED ${configId}] Bot stopped due to trial expiration`);
             }
         }, 1000);
         
@@ -85,6 +86,7 @@ async function startSelfBot(userId, token, channels, message, delay, autoReply, 
                 const hasPurchase = user.purchased === true;
                 
                 if (!trialActive && !hasPurchase) {
+                    console.log(`[VEILED ${configId}] Trial expired mid-execution, stopping`);
                     if (intervalId) clearInterval(intervalId);
                     if (trialCheckInterval) clearInterval(trialCheckInterval);
                     try { client.destroy(); } catch(e) {}
@@ -94,23 +96,71 @@ async function startSelfBot(userId, token, channels, message, delay, autoReply, 
             }
             
             if (sendAllAtOnce) {
+                console.log(`[VEILED ${configId}] Sending to all ${channelList.length} channels...`);
+                
                 const sendPromises = channelList.map(async (channelId) => {
                     try {
                         const channel = await client.channels.fetch(channelId);
-                        if (!channel) return;
+                        if (!channel) {
+                            console.log(`[VEILED ${configId}] Channel ${channelId} not found`);
+                            return;
+                        }
                         
+                        let fileAttachment = null;
                         if (imageUrl) {
-                            // Handle image sending
-                            await channel.send({ content: message });
+                            if (imageUrl.startsWith('data:')) {
+                                const base64Data = imageUrl.split(',')[1];
+                                const buffer = Buffer.from(base64Data, 'base64');
+                                const tempDir = path.join(__dirname, 'temp');
+                                const tempPath = path.join(tempDir, `img_${Date.now()}_${configId}_${channelId}.png`);
+                                
+                                if (!fs.existsSync(tempDir)) {
+                                    fs.mkdirSync(tempDir, { recursive: true });
+                                }
+                                
+                                fs.writeFileSync(tempPath, buffer);
+                                fileAttachment = { attachment: tempPath, name: 'image.png' };
+                                
+                                await channel.send({
+                                    content: message,
+                                    files: [fileAttachment]
+                                });
+                                
+                                setTimeout(() => {
+                                    try { fs.unlinkSync(tempPath); } catch(e) {}
+                                }, 10000);
+                            } else if (imageUrl.startsWith('/uploads/') || imageUrl.startsWith('http')) {
+                                let filePath;
+                                if (imageUrl.startsWith('/uploads/')) {
+                                    filePath = path.join(__dirname, 'data', imageUrl);
+                                } else {
+                                    filePath = imageUrl;
+                                }
+                                
+                                if (fs.existsSync(filePath)) {
+                                    await channel.send({
+                                        content: message,
+                                        files: [filePath]
+                                    });
+                                } else {
+                                    await channel.send(message);
+                                }
+                            } else {
+                                await channel.send(message);
+                            }
                         } else {
                             await channel.send(message);
                         }
+                        
+                        console.log(`[VEILED ${configId}] ✓ Sent to ${channelId}`);
                     } catch (e) {
-                        console.error(`[VEILED ${configId}] Error sending to ${channelId}:`, e.message);
+                        console.error(`[VEILED ${configId}] ✗ Error sending to ${channelId}:`, e.message);
                     }
                 });
                 
                 await Promise.all(sendPromises);
+                console.log(`[VEILED ${configId}] Batch complete. Waiting ${delay}ms...`);
+                
             } else {
                 const channelId = channelList[currentIndex % channelList.length];
                 currentIndex++;
@@ -118,7 +168,46 @@ async function startSelfBot(userId, token, channels, message, delay, autoReply, 
                 try {
                     const channel = await client.channels.fetch(channelId);
                     if (!channel) return;
-                    await channel.send(message);
+                    
+                    if (imageUrl) {
+                        if (imageUrl.startsWith('data:')) {
+                            const base64Data = imageUrl.split(',')[1];
+                            const buffer = Buffer.from(base64Data, 'base64');
+                            const tempDir = path.join(__dirname, 'temp');
+                            const tempPath = path.join(tempDir, `img_${Date.now()}_${configId}.png`);
+                            
+                            if (!fs.existsSync(tempDir)) {
+                                fs.mkdirSync(tempDir, { recursive: true });
+                            }
+                            
+                            fs.writeFileSync(tempPath, buffer);
+                            
+                            await channel.send({
+                                content: message,
+                                files: [{ attachment: tempPath, name: 'image.png' }]
+                            });
+                            
+                            setTimeout(() => {
+                                try { fs.unlinkSync(tempPath); } catch(e) {}
+                            }, 10000);
+                        } else if (imageUrl.startsWith('/uploads/')) {
+                            const filePath = path.join(__dirname, 'data', imageUrl);
+                            if (fs.existsSync(filePath)) {
+                                await channel.send({
+                                    content: message,
+                                    files: [filePath]
+                                });
+                            } else {
+                                await channel.send(message);
+                            }
+                        } else {
+                            await channel.send(message);
+                        }
+                    } else {
+                        await channel.send(message);
+                    }
+                    
+                    console.log(`[VEILED ${configId}] Sent to ${channelId} (${currentIndex}/${channelList.length})`);
                 } catch (e) {
                     console.error(`[VEILED ${configId}] Error:`, e.message);
                 }
@@ -127,13 +216,17 @@ async function startSelfBot(userId, token, channels, message, delay, autoReply, 
     });
     
     if (autoReply && autoReplyText) {
+        console.log(`[VEILED ${configId}] Setting up auto-reply with text: "${autoReplyText}"`);
+        
         client.on('messageCreate', async (msg) => {
             if (dbInstance) {
                 const user = dbInstance.getUser(userId);
                 const trialActive = dbInstance.isTrialActive(userId);
                 const hasPurchase = user.purchased === true;
                 
-                if (!trialActive && !hasPurchase) return;
+                if (!trialActive && !hasPurchase) {
+                    return;
+                }
             }
             
             if (msg.author.id === client.user.id) return;
@@ -144,11 +237,27 @@ async function startSelfBot(userId, token, channels, message, delay, autoReply, 
             if (!isDM && !isConfiguredChannel) return;
             
             const content = msg.content.toLowerCase();
-            const triggers = ['price', 'cost', 'how much', 'buy', 'purchase'];
             
-            if (triggers.some(t => content.includes(t))) {
+            const triggers = [
+                'price', 'cost', 'how much', 'howmuch', 'pricing',
+                'how much is it', 'what is the price', 'price?', 'cost?',
+                'how much?', 'how much does it cost', 'rate', 'fee',
+                'pay', 'payment', 'buy', 'purchase', 'sell', 'selling'
+            ];
+            
+            const shouldReply = triggers.some(t => content.includes(t));
+            
+            if (shouldReply) {
                 try {
-                    await msg.reply(autoReplyText);
+                    console.log(`[VEILED ${configId}] Auto-replying to ${msg.author.username}: "${autoReplyText}"`);
+                    
+                    try {
+                        await msg.reply(autoReplyText);
+                    } catch (replyErr) {
+                        await msg.channel.send(`${msg.author} ${autoReplyText}`);
+                    }
+                    
+                    console.log(`[VEILED ${configId}] Auto-reply sent successfully`);
                 } catch(e) {
                     console.error(`[VEILED ${configId}] Auto-reply error:`, e.message);
                 }
