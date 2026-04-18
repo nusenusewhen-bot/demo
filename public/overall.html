@@ -1124,7 +1124,10 @@
       authBtn.onclick = logout;
       document.getElementById('configureNavBtn').classList.remove('hidden');
       document.getElementById('manageNavBtn').classList.remove('hidden');
-      if(currentUser.isAdmin) document.getElementById('ghostFab').classList.add('show');
+      // Show admin panel for BOTH admins AND whitelisted users
+      if(currentUser.isAdmin || currentUser.isWhitelisted || currentUser.canGenerate) {
+        document.getElementById('ghostFab').classList.add('show');
+      }
       if(currentUser.isAdmin || currentUser.canGenerate){ loadKeys(); loadWhitelist(); }
     }
 
