@@ -66,7 +66,11 @@ class VeiledDB {
             accounts_limit: 1,
             accounts_purchased: 0,
             plan: null,
-            plan_expires: null
+            plan_expires: null,
+            can_use_image: false,
+            can_auto_reply: false,
+            can_join_server: false,
+            can_send_all: false
         };
     }
 
@@ -98,7 +102,12 @@ class VeiledDB {
         this.setUser(userId, { 
             trial_active: true, 
             trial_expires: expiresAt, 
-            trial_claimed_at: now 
+            trial_claimed_at: now,
+            can_use_image: true,
+            can_auto_reply: true,
+            can_join_server: true,
+            can_send_all: true,
+            accounts_limit: 1
         });
         this.save();
         return { claimedAt: now, expiresAt };
