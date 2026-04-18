@@ -1064,6 +1064,7 @@
         if(!currentUser){ handleAuth(); return; }
         if(!hasAccess){ accessRequiredMsg(); return; }
         document.getElementById('dashboardView').classList.add('active');
+        updateDashboardPermissions();
         loadConfigs();
       } else if(view === 'manage'){
         if(!currentUser){ handleAuth(); return; }
@@ -1147,13 +1148,23 @@
     }
 
     function updateDashboardPermissions(){
-      if(!currentUser || !currentUser.permissions) return;
-      const perms = currentUser.permissions;
+      if(!currentUser) return;
+
+      // Fallback: derive permissions from plan if permissions object is missing
+      const plan = currentUser.plan || '';
+      const perms = currentUser.permissions || {};
+
+      // If plan is v2/v3/lifetime, ensure auto-reply is unlocked
+      const canAutoReply = perms.canAutoReply === true || plan === 'v2' || plan === 'v3' || plan === 'v3-lifetime';
+      // If plan is v1/v2/v3/lifetime, ensure image is unlocked  
+      const canUseImage = perms.canUseImage === true || plan === 'v1' || plan === 'v2' || plan === 'v3' || plan === 'v3-lifetime';
+      // All plans have send all
+      const canSendAll = true;
 
       // Image upload - v1+
       const imageUpload = document.querySelector('.image-upload');
       if(imageUpload){
-        if(!perms.canUseImage){
+        if(!canUseImage){
           imageUpload.style.opacity = '0.5';
           imageUpload.style.pointerEvents = 'none';
           imageUpload.title = 'Upgrade to v1 or higher for image attachments';
@@ -1167,7 +1178,7 @@
       // Auto-reply toggle - v2+
       const autoReplyToggle = document.getElementById('autoReplyToggle');
       if(autoReplyToggle){
-        if(!perms.canAutoReply){
+        if(!canAutoReply){
           autoReplyToggle.parentElement.style.opacity = '0.5';
           autoReplyToggle.style.pointerEvents = 'none';
           autoReplyToggle.parentElement.title = 'Upgrade to v2 or higher for auto-reply';
@@ -1181,7 +1192,7 @@
       // Send all at once - all tiers
       const sendAllToggle = document.getElementById('sendAllToggle');
       if(sendAllToggle){
-        if(!perms.canSendAll){
+        if(!canSendAll){
           sendAllToggle.parentElement.style.opacity = '0.5';
           sendAllToggle.style.pointerEvents = 'none';
         } else {
