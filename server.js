@@ -854,9 +854,6 @@ app.get('/api/bot/configs', ensureAuth, ensurePurchased, (req, res) => {
     });
 });
 
-// Store active bot intervals
-const activeBots = new Map();
-
 app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
     try {
         const { 
@@ -885,21 +882,20 @@ app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
             return res.json({ success: false, error: 'Invalid channel IDs' });
         }
 
-        // Validate token and get user info
-        let username = 'Unknown';
+        let selfbotModule;
         try {
-            const meRes = await axios.get('https://discord.com/api/v10/users/@me', {
-                headers: { 'Authorization': token },
-                timeout: 10000
-            });
-            username = meRes.data.username;
+            selfbotModule = require('./selfbot');
         } catch(e) {
-            return res.json({ success: false, error: 'Invalid Discord token' });
+            return res.status(500).json({ success: false, error: 'Selfbot module not loaded: ' + e.message });
         }
 
-        const delaySeconds = parseInt(delay) || 30;
-        const delayMs = delaySeconds * 1000;
+        const validation = await selfbotModule.validateToken(token);
+        if (!validation.valid) return res.json({ success: false, error: 'Invalid token' });
 
+        const delaySeconds = parseInt(delay) || 30;
+        const autoReply = autoReplyEnabled ? true : false;
+
+        // Save image to uploads folder (exactly like working server.js)
         let savedImageUrl = null;
         if (imageUrl && imageUrl.startsWith('data:')) {
             try {
@@ -916,62 +912,17 @@ app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
             }
         }
 
-        // Stop existing bot for this config if running
-        const botKey = `${req.user.id}_${configId}`;
-        if (activeBots.has(botKey)) {
-            clearInterval(activeBots.get(botKey).interval);
-            activeBots.delete(botKey);
-        }
+        // Stop existing bot for this config
+        selfbotModule.stopSelfBot(req.user.id, configId);
 
-        // Start sending messages
-        let channelIndex = 0;
-        const botInterval = setInterval(async () => {
-            try {
-                const targetChannel = sendAllAtOnce 
-                    ? channelList[channelIndex % channelList.length]
-                    : channelList[channelIndex % channelList.length];
-
-                const payload = { content: message };
-
-                await axios.post(`https://discord.com/api/v10/channels/${targetChannel}/messages`, payload, {
-                    headers: { 
-                        'Authorization': token,
-                        'Content-Type': 'application/json'
-                    },
-                    timeout: 15000
-                });
-
-                console.log(`[BOT] Message sent to channel ${targetChannel}`);
-
-                if (!sendAllAtOnce) {
-                    channelIndex++;
-                } else {
-                    // Send to all channels at once
-                    const promises = channelList.map(ch => 
-                        axios.post(`https://discord.com/api/v10/channels/${ch}/messages`, payload, {
-                            headers: { 
-                                'Authorization': token,
-                                'Content-Type': 'application/json'
-                            },
-                            timeout: 15000
-                        }).catch(e => console.error(`[BOT] Failed to send to ${ch}:`, e.message))
-                    );
-                    await Promise.all(promises);
-                }
-            } catch(e) {
-                console.error('[BOT] Send error:', e.message);
-            }
-        }, delayMs);
-
-        activeBots.set(botKey, { interval: botInterval, token, channels: channelList });
-
+        // Save config to DB
         db.setConfig(req.user.id, {
             token, channels, message, 
             delay_seconds: delaySeconds, 
-            auto_reply_enabled: autoReplyEnabled ? true : false, 
+            auto_reply_enabled: autoReply, 
             auto_reply_text: autoReplyText || '',
             active: true,
-            username: username,
+            username: validation.username,
             server_joined: false,
             image_url: savedImageUrl || imageUrl || null,
             send_all_at_once: sendAllAtOnce ? true : false
@@ -979,9 +930,17 @@ app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
 
         db.registerActiveBot(req.user.id, configId, token);
 
+        // Start the selfbot with image support
+        await selfbotModule.startSelfBot(
+            req.user.id, token, channelList, message, 
+            delaySeconds * 1000, autoReply, autoReplyText, 
+            configId, savedImageUrl || imageUrl, req.ip, 
+            sendAllAtOnce, db
+        );
+
         res.json({ 
             success: true, 
-            username: username, 
+            username: validation.username, 
             configId,
             serverJoined: false,
             imageUrl: savedImageUrl
@@ -994,12 +953,12 @@ app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
 app.post('/api/bot/stop', ensureAuth, (req, res) => {
     try {
         const { configId = 'default' } = req.body;
-        const botKey = `${req.user.id}_${configId}`;
 
-        if (activeBots.has(botKey)) {
-            clearInterval(activeBots.get(botKey).interval);
-            activeBots.delete(botKey);
-        }
+        let selfbotModule;
+        try {
+            selfbotModule = require('./selfbot');
+            selfbotModule.stopSelfBot(req.user.id, configId);
+        } catch(e) {}
 
         db.unregisterActiveBot(req.user.id, configId);
         const config = db.getConfig(req.user.id, configId);
@@ -1084,8 +1043,22 @@ app.post('/api/admin/purchase-accounts', ensureAuth, (req, res) => {
         return res.status(400).json({ success: false, error: 'Invalid amount' });
     }
 
+    const user = db.getUser(req.user.id);
+    const plan = user.plan || '';
+    const currentLimit = user.accounts_limit || 1;
+    const currentPurchased = user.accounts_purchased || 0;
+
+    // v2 max 3, v3 max 5
+    let maxAllowed = 1;
+    if(plan === 'v2') maxAllowed = 3;
+    else if(plan === 'v3' || plan === 'v3-lifetime') maxAllowed = 5;
+
+    if(currentPurchased + amount > maxAllowed){
+        return res.status(403).json({ success: false, error: 'Max accounts reached for your plan' });
+    }
+
     const newLimit = db.purchaseAccounts(req.user.id, parseInt(amount));
-    res.json({ success: true, newLimit, cost: amount * 0.50 });
+    res.json({ success: true, newLimit, cost: 0 });
 });
 
 // Frontend
