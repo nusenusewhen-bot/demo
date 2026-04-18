@@ -5,10 +5,10 @@ process.on('unhandledRejection', (reason) => console.error('[FATAL]', reason));
 
 console.log('[STARTUP] Veiled Adv Loading...');
 
-const app = require('./server');
+const { app } = require('./server');
 const { fastScan } = require('./wallet');
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 const OWNER_LTC_ADDRESS = process.env.OWNER_LTC_ADDRESS;
 const WALLET_MNEMONIC = process.env.WALLET_MNEMONIC;
 
@@ -18,7 +18,7 @@ app.listen(PORT, '0.0.0.0', () => {
 
 if (OWNER_LTC_ADDRESS && WALLET_MNEMONIC) {
     console.log('[FAST SCAN] Starting 10-second scans');
-
+    
     setInterval(async () => {
         try {
             console.log('[FAST SCAN] Running...');
@@ -32,7 +32,7 @@ if (OWNER_LTC_ADDRESS && WALLET_MNEMONIC) {
             console.error('[FAST SCAN] Error:', e.message);
         }
     }, 10000);
-
+    
     setTimeout(async () => {
         console.log('[FAST SCAN] Initial scan...');
         try {
@@ -44,6 +44,4 @@ if (OWNER_LTC_ADDRESS && WALLET_MNEMONIC) {
     }, 3000);
 } else {
     console.log('[FAST SCAN] Skipped - missing env vars');
-    console.log('[DEBUG] OWNER_LTC_ADDRESS exists:', !!OWNER_LTC_ADDRESS);
-    console.log('[DEBUG] WALLET_MNEMONIC exists:', !!WALLET_MNEMONIC);
 }
