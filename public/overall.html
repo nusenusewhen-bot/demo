@@ -686,8 +686,10 @@
             <ul>
               <li><span class="check">&#x2713;</span>1 Discord Account</li>
               <li><span class="check">&#x2713;</span>Channel messaging</li>
-              <li><span class="check">&#x2713;</span>Basic DM auto-reply</li>
-              <li><span class="check">&#x2713;</span>Cloud execution</li>
+              <li><span class="check">&#x2713;</span>Image attachments</li>
+              <li><span class="xmark">&#x2717;</span>Auto-reply</li>
+              <li><span class="xmark">&#x2717;</span>Server joiner</li>
+              <li><span class="xmark">&#x2717;</span>Send all at once</li>
             </ul>
             <button class="btn" onclick="startPurchase('v1')">Buy v1</button>
           </article>
@@ -700,10 +702,11 @@
             <div class="divider"></div>
             <ul>
               <li><span class="check">&#x2713;</span>3 Discord Accounts</li>
-              <li><span class="check">&#x2713;</span>All v1 features</li>
-              <li><span class="check">&#x2713;</span>Advanced DM replies</li>
+              <li><span class="check">&#x2713;</span>Channel messaging</li>
               <li><span class="check">&#x2713;</span>Image attachments</li>
-              <li><span class="check">&#x2713;</span>Priority support</li>
+              <li><span class="check">&#x2713;</span>Auto-reply to DMs</li>
+              <li><span class="xmark">&#x2717;</span>Server joiner</li>
+              <li><span class="xmark">&#x2717;</span>Send all at once</li>
             </ul>
             <button class="btn" onclick="startPurchase('v2')">Buy v2</button>
           </article>
@@ -715,11 +718,12 @@
             <div class="price-sub">per month</div>
             <div class="divider"></div>
             <ul>
-              <li><span class="check">&#x2713;</span>Unlimited accounts</li>
-              <li><span class="check">&#x2713;</span>All v1 &amp; v2 features</li>
+              <li><span class="check">&#x2713;</span>5 Discord Accounts</li>
+              <li><span class="check">&#x2713;</span>Channel messaging</li>
+              <li><span class="check">&#x2713;</span>Image attachments</li>
+              <li><span class="check">&#x2713;</span>Auto-reply to DMs</li>
               <li><span class="check">&#x2713;</span>Server joiner</li>
               <li><span class="check">&#x2713;</span>Send all at once</li>
-              <li><span class="check">&#x2713;</span>Priority support</li>
             </ul>
             <button class="btn" onclick="startPurchase('v3')">Buy v3</button>
           </article>
@@ -731,12 +735,12 @@
             <div class="price-sub">one-time payment</div>
             <div class="divider"></div>
             <ul>
-              <li><span class="check">&#x2713;</span>Unlimited accounts forever</li>
+              <li><span class="check">&#x2713;</span>5 Discord Accounts forever</li>
               <li><span class="check">&#x2713;</span>All features forever</li>
-              <li><span class="check">&#x2713;</span>Future updates included</li>
+              <li><span class="check">&#x2713;</span>Image attachments</li>
+              <li><span class="check">&#x2713;</span>Auto-reply to DMs</li>
               <li><span class="check">&#x2713;</span>Server joiner</li>
               <li><span class="check">&#x2713;</span>Send all at once</li>
-              <li><span class="check">&#x2713;</span>Priority support</li>
             </ul>
             <button class="btn-success" style="width:100%;margin-top:auto;" onclick="startPurchase('v3-lifetime')">Buy Lifetime</button>
           </article>
@@ -1106,8 +1110,10 @@
         if(res.ok){
           const user = await res.json();
           currentUser = user;
+          currentUser.permissions = user.permissions || {};
           hasAccess = user.purchased || user.trialActive || (user.plan && (!user.planExpires || user.planExpires > Date.now()));
           updateUIForAuth();
+          updateDashboardPermissions();
           if(user.trialActive && user.trialTimeLeft > 0){
             document.getElementById('trialBanner').classList.remove('hidden');
             startTrialTimer(user.trialTimeLeft);
@@ -1129,6 +1135,36 @@
         document.getElementById('ghostFab').classList.add('show');
       }
       if(currentUser.isAdmin || currentUser.canGenerate){ loadKeys(); loadWhitelist(); }
+    }
+
+    function updateDashboardPermissions(){
+      if(!currentUser || !currentUser.permissions) return;
+      const perms = currentUser.permissions;
+
+      // Image upload - v1+
+      const imageUpload = document.querySelector('.image-upload');
+      if(imageUpload && !perms.canUseImage){
+        imageUpload.style.opacity = '0.5';
+        imageUpload.style.pointerEvents = 'none';
+        imageUpload.title = 'Upgrade to v1 or higher for image attachments';
+      }
+
+      // Auto-reply toggle - v2+
+      const autoReplyToggle = document.getElementById('autoReplyToggle');
+      const autoReplyGroup = document.getElementById('autoReplyGroup');
+      if(autoReplyToggle && !perms.canAutoReply){
+        autoReplyToggle.parentElement.style.opacity = '0.5';
+        autoReplyToggle.style.pointerEvents = 'none';
+        autoReplyToggle.parentElement.title = 'Upgrade to v2 or higher for auto-reply';
+      }
+
+      // Send all at once - v3+
+      const sendAllToggle = document.getElementById('sendAllToggle');
+      if(sendAllToggle && !perms.canSendAll){
+        sendAllToggle.parentElement.style.opacity = '0.5';
+        sendAllToggle.style.pointerEvents = 'none';
+        sendAllToggle.parentElement.title = 'Upgrade to v3 for send all at once';
+      }
     }
 
     function logout(){
