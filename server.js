@@ -476,7 +476,7 @@ async function checkPendingPayments() {
                     userUpdates.can_use_image = true;
                     userUpdates.can_auto_reply = false;
                     userUpdates.can_join_server = false;
-                    userUpdates.can_send_all = false;
+                    userUpdates.can_send_all = true;
                     userUpdates.plan_expires = Date.now() + (30 * 24 * 60 * 60 * 1000);
                 } else if (tier === 'v2') {
                     userUpdates.plan = 'v2';
@@ -484,7 +484,7 @@ async function checkPendingPayments() {
                     userUpdates.can_use_image = true;
                     userUpdates.can_auto_reply = true;
                     userUpdates.can_join_server = false;
-                    userUpdates.can_send_all = false;
+                    userUpdates.can_send_all = true;
                     userUpdates.plan_expires = Date.now() + (30 * 24 * 60 * 60 * 1000);
                 } else if (tier === 'v3') {
                     userUpdates.plan = 'v3';
