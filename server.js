@@ -352,7 +352,7 @@ app.get('/login', passport.authenticate('discord'));
 
 app.get('/auth/discord/callback', 
     passport.authenticate('discord', { failureRedirect: '/' }), 
-    (req, res) => res.redirect('/dashboard')
+    (req, res) => res.redirect('/')
 );
 
 app.get('/logout', (req, res) => {
@@ -671,13 +671,8 @@ app.post('/api/admin/purchase-accounts', ensureAuth, (req, res) => {
     res.json({ success: true, newLimit, cost: amount * 0.50 });
 });
 
-// Frontend Routes
+// Frontend Routes - Serve the single page app
 app.get('/', (req, res) => {
-    if (req.isAuthenticated()) return res.redirect('/dashboard');
-    res.sendFile(path.join(__dirname, 'public', 'overall.html'));
-});
-
-app.get('/dashboard', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'overall.html'));
 });
 
@@ -686,5 +681,4 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: err.message });
 });
 
-// Export as object with app and db
 module.exports = { app, db };
