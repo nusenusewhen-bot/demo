@@ -457,7 +457,8 @@
     .dashboard-container.active{display:block}
     .section-title-dash{font-size:0.75rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:12px}
     .form-group{margin-bottom:24px}
-    .form-input{width:100%;padding:16px 20px;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:14px;color:var(--text);font-size:1rem;transition:all 0.2s}
+    .form-input, select.form-input{width:100%;padding:16px 20px;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:14px;color:var(--text);font-size:1rem;transition:all 0.2s}
+    select.form-input option{background:var(--bg-soft);color:var(--text);padding:10px}
     .form-input:focus{outline:none;border-color:var(--line-2);box-shadow:0 0 0 3px rgba(255,255,255,.1)}
     .form-input::placeholder{color:var(--muted)}
     .image-upload{border:2px dashed var(--line);border-radius:16px;padding:40px;text-align:center;cursor:pointer;transition:all 0.2s;background:rgba(255,255,255,.05)}
@@ -949,8 +950,8 @@
       <div class="accounts-info"><span class="accounts-count" style="color:var(--success);font-size:1rem;">&#x2705; Logged in as <strong id="botUsername">@user</strong></span><span style="color:var(--muted);">Bot is running</span></div>
     </div>
     <div class="accounts-bar">
-      <div class="accounts-info"><span class="accounts-count" id="accountsCount">0/1</span><span style="color:var(--muted);">Active Accounts</span></div>
-      <button class="buy-slot-btn" onclick="showPurchaseModal()">+ Buy Slot ($0.50)</button>
+      <div class="accounts-info"><span class="accounts-count" id="accountsCount">0/1</span><span style="color:var(--muted);" id="accountsLabel">Active Accounts</span></div>
+      <button class="buy-slot-btn" id="addAccountBtn" onclick="handleAddAccount()">+ Add Account</button>
     </div>
     <div class="form-group"><label class="section-title-dash">Discord Token</label><input type="password" class="form-input" id="discordToken" placeholder="Enter your Discord token..."></div>
     <div class="form-group">
@@ -1065,6 +1066,7 @@
         if(!hasAccess){ accessRequiredMsg(); return; }
         document.getElementById('dashboardView').classList.add('active');
         updateDashboardPermissions();
+        updateAccountsButton();
         loadConfigs();
       } else if(view === 'manage'){
         if(!currentUser){ handleAuth(); return; }
@@ -1129,6 +1131,7 @@
             startTrialTimer(user.trialTimeLeft);
           }
           document.getElementById('accountsCount').textContent = (user.accountsPurchased || 0) + '/' + (user.accountsLimit || 1);
+          updateAccountsButton();
         }
       } catch(e) {}
     }
@@ -1156,23 +1159,17 @@
 
       // If plan is v2/v3/lifetime, ensure auto-reply is unlocked
       const canAutoReply = perms.canAutoReply === true || plan === 'v2' || plan === 'v3' || plan === 'v3-lifetime';
-      // If plan is v1/v2/v3/lifetime, ensure image is unlocked  
-      const canUseImage = perms.canUseImage === true || plan === 'v1' || plan === 'v2' || plan === 'v3' || plan === 'v3-lifetime';
+      // All tiers v1+ have image upload
+      const canUseImage = true;
       // All plans have send all
       const canSendAll = true;
 
-      // Image upload - v1+
+      // Image upload - ALL tiers (v1+ all have image)
       const imageUpload = document.querySelector('.image-upload');
       if(imageUpload){
-        if(!canUseImage){
-          imageUpload.style.opacity = '0.5';
-          imageUpload.style.pointerEvents = 'none';
-          imageUpload.title = 'Upgrade to v1 or higher for image attachments';
-        } else {
-          imageUpload.style.opacity = '1';
-          imageUpload.style.pointerEvents = 'auto';
-          imageUpload.title = '';
-        }
+        imageUpload.style.opacity = '1';
+        imageUpload.style.pointerEvents = 'auto';
+        imageUpload.title = '';
       }
 
       // Auto-reply toggle - v2+
@@ -1192,14 +1189,67 @@
       // Send all at once - all tiers
       const sendAllToggle = document.getElementById('sendAllToggle');
       if(sendAllToggle){
-        if(!canSendAll){
-          sendAllToggle.parentElement.style.opacity = '0.5';
-          sendAllToggle.style.pointerEvents = 'none';
-        } else {
-          sendAllToggle.parentElement.style.opacity = '1';
-          sendAllToggle.style.pointerEvents = 'auto';
-        }
+        sendAllToggle.parentElement.style.opacity = '1';
+        sendAllToggle.style.pointerEvents = 'auto';
       }
+    }
+
+    function updateAccountsButton(){
+      if(!currentUser) return;
+      const btn = document.getElementById('addAccountBtn');
+      const count = document.getElementById('accountsCount');
+      const plan = currentUser.plan || '';
+      const limit = currentUser.accountsLimit || 1;
+      const used = currentUser.accountsPurchased || 0;
+
+      if(!btn) return;
+
+      // v2 gets up to 3 accounts, v3 gets up to 5
+      if(plan === 'v2' || plan === 'v3' || plan === 'v3-lifetime'){
+        btn.textContent = '+ Add Account';
+        btn.onclick = addAccountFree;
+        if(used >= limit){
+          btn.style.opacity = '0.5';
+          btn.style.pointerEvents = 'none';
+          btn.textContent = 'Max Accounts (' + limit + ')';
+        } else {
+          btn.style.opacity = '1';
+          btn.style.pointerEvents = 'auto';
+        }
+      } else {
+        // v1 or trial - show buy slot
+        btn.textContent = '+ Buy Slot ($0.50)';
+        btn.onclick = showPurchaseModal;
+      }
+    }
+
+    async function addAccountFree(){
+      if(!currentUser) return;
+      const plan = currentUser.plan || '';
+      let maxAccounts = 1;
+      if(plan === 'v2') maxAccounts = 3;
+      else if(plan === 'v3' || plan === 'v3-lifetime') maxAccounts = 5;
+
+      const currentCount = currentUser.accountsPurchased || 0;
+      if(currentCount >= maxAccounts){
+        alert('Max accounts reached for your plan');
+        return;
+      }
+
+      // Just increment the count on server
+      try {
+        const res = await fetch('/api/admin/purchase-accounts', {
+          method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ amount: 1 })
+        });
+        const data = await res.json();
+        if(data.success){
+          currentUser.accountsPurchased = (currentUser.accountsPurchased || 0) + 1;
+          currentUser.accountsLimit = data.newLimit;
+          document.getElementById('accountsCount').textContent = currentUser.accountsPurchased + '/' + currentUser.accountsLimit;
+          updateAccountsButton();
+        }
+      } catch(e) {}
     }
 
     function logout(){
