@@ -347,7 +347,7 @@ function ensureCanGenerate(req, res, next) {
 // Health check
 app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
 
-// Auth routes
+// Auth routes - Discord OAuth
 app.get('/login', passport.authenticate('discord'));
 
 app.get('/auth/discord/callback', 
@@ -679,6 +679,11 @@ app.get('/', (req, res) => {
 app.use((err, req, res, next) => {
     console.error('[SERVER ERROR]', err);
     res.status(500).json({ error: err.message });
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`[Veiled Adv] Server running on port ${PORT}`);
 });
 
 module.exports = { app, db };
