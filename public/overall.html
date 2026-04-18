@@ -951,7 +951,7 @@
     </div>
     <div class="accounts-bar">
       <div class="accounts-info"><span class="accounts-count" id="accountsCount">0/1</span><span style="color:var(--muted);" id="accountsLabel">Active Accounts</span></div>
-      <button class="buy-slot-btn" id="addAccountBtn" onclick="handleAddAccount()">+ Add Account</button>
+      <button class="buy-slot-btn" id="addAccountBtn">New Account</button>
     </div>
     <div class="form-group"><label class="section-title-dash">Discord Token</label><input type="password" class="form-input" id="discordToken" placeholder="Enter your Discord token..."></div>
     <div class="form-group">
@@ -1130,7 +1130,14 @@
             document.getElementById('trialBanner').classList.remove('hidden');
             startTrialTimer(user.trialTimeLeft);
           }
-          document.getElementById('accountsCount').textContent = (user.accountsPurchased || 0) + '/' + (user.accountsLimit || 1);
+          // Ensure v2/v3 users get their correct plan limits
+          let accountLimit = user.accountsLimit || 1;
+          const plan = user.plan || '';
+          if(plan === 'v2' && accountLimit < 3) accountLimit = 3;
+          else if((plan === 'v3' || plan === 'v3-lifetime') && accountLimit < 5) accountLimit = 5;
+          currentUser.accountsLimit = accountLimit;
+          currentUser.accountsPurchased = user.accountsPurchased || 0;
+          document.getElementById('accountsCount').textContent = (currentUser.accountsPurchased || 0) + '/' + accountLimit;
           updateAccountsButton();
         }
       } catch(e) {}
@@ -1197,7 +1204,6 @@
     function updateAccountsButton(){
       if(!currentUser) return;
       const btn = document.getElementById('addAccountBtn');
-      const count = document.getElementById('accountsCount');
       const plan = currentUser.plan || '';
       const limit = currentUser.accountsLimit || 1;
       const used = currentUser.accountsPurchased || 0;
@@ -1206,7 +1212,7 @@
 
       // v2 gets up to 3 accounts, v3 gets up to 5
       if(plan === 'v2' || plan === 'v3' || plan === 'v3-lifetime'){
-        btn.textContent = '+ Add Account';
+        btn.textContent = 'New Account';
         btn.onclick = addAccountFree;
         if(used >= limit){
           btn.style.opacity = '0.5';
@@ -1217,8 +1223,8 @@
           btn.style.pointerEvents = 'auto';
         }
       } else {
-        // v1 or trial - show buy slot
-        btn.textContent = '+ Buy Slot ($0.50)';
+        // v1 or trial - show buy slot (still labeled New Account per user request)
+        btn.textContent = 'New Account';
         btn.onclick = showPurchaseModal;
       }
     }
@@ -1236,7 +1242,7 @@
         return;
       }
 
-      // Just increment the count on server
+      // Increment account count on server
       try {
         const res = await fetch('/api/admin/purchase-accounts', {
           method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'},
@@ -1244,12 +1250,14 @@
         });
         const data = await res.json();
         if(data.success){
-          currentUser.accountsPurchased = (currentUser.accountsPurchased || 0) + 1;
-          currentUser.accountsLimit = data.newLimit;
+          currentUser.accountsPurchased = data.purchased || (currentUser.accountsPurchased || 0) + 1;
+          currentUser.accountsLimit = data.newLimit || maxAccounts;
           document.getElementById('accountsCount').textContent = currentUser.accountsPurchased + '/' + currentUser.accountsLimit;
           updateAccountsButton();
+        } else {
+          alert(data.error || 'Failed to add account');
         }
-      } catch(e) {}
+      } catch(e) { alert('Error adding account'); }
     }
 
     function logout(){
@@ -1644,7 +1652,14 @@
           body: JSON.stringify({ amount: purchaseQty })
         });
         const data = await res.json();
-        if(data.success){ alert('Purchased ' + purchaseQty + ' slot(s)!'); document.getElementById('accountsCount').textContent = data.newLimit + '/' + data.newLimit; hideModal('purchaseModal'); }
+        if(data.success){
+          alert('Purchased ' + purchaseQty + ' slot(s)!');
+          currentUser.accountsPurchased = data.purchased || (currentUser.accountsPurchased || 0) + purchaseQty;
+          currentUser.accountsLimit = data.newLimit;
+          document.getElementById('accountsCount').textContent = currentUser.accountsPurchased + '/' + currentUser.accountsLimit;
+          hideModal('purchaseModal');
+          updateAccountsButton();
+        }
         else { alert(data.error || 'Purchase failed'); }
       } catch(e) { alert('Error purchasing slots'); }
     }
