@@ -869,11 +869,12 @@ app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
 
         const user = db.getUser(req.user.id);
         const currentConfigs = db.getConfigs(req.user.id);
+        const activeConfigCount = currentConfigs.filter(c => c.active === true).length;
 
-        if (currentConfigs.length >= (user.accounts_limit || 1)) {
+        if (activeConfigCount >= (user.accounts_limit || 1)) {
             return res.status(403).json({ 
                 success: false, 
-                error: 'Account limit reached. Purchase additional slots.' 
+                error: 'Account limit reached. Stop an active bot or purchase additional slots.' 
             });
         }
 
@@ -1057,8 +1058,18 @@ app.post('/api/admin/purchase-accounts', ensureAuth, (req, res) => {
         return res.status(403).json({ success: false, error: 'Max accounts reached for your plan' });
     }
 
-    const newLimit = db.purchaseAccounts(req.user.id, parseInt(amount));
-    res.json({ success: true, newLimit, cost: 0 });
+    let newLimit = currentLimit;
+    let newPurchased = currentPurchased + parseInt(amount);
+
+    if(plan === 'v2' || plan === 'v3' || plan === 'v3-lifetime'){
+        // v2/v3: free accounts within plan limit - don't inflate accounts_limit
+        db.setUser(req.user.id, { accounts_purchased: newPurchased });
+    } else {
+        // v1/trial: paid slot purchase - increase both limit and purchased
+        newLimit = db.purchaseAccounts(req.user.id, parseInt(amount));
+    }
+
+    res.json({ success: true, newLimit, purchased: newPurchased, cost: 0 });
 });
 
 // Frontend
