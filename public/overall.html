@@ -399,7 +399,7 @@
       gap:16px;
     }
     .services-grid{grid-template-columns:repeat(3, minmax(0,1fr))}
-    .plans-grid{grid-template-columns:repeat(3, minmax(0,1fr))}
+    .plans-grid{grid-template-columns:repeat(4, minmax(0,1fr))}
     .faq-grid{grid-template-columns:repeat(2, minmax(0,1fr))}
     .founder-grid{grid-template-columns:repeat(2, minmax(0,1fr))}
     .footer-grid{grid-template-columns:1.15fr .85fr; align-items:start}
@@ -479,7 +479,7 @@
       font-weight:800;
     }
     .price-amount{
-      font-size:clamp(3rem, 6vw, 4rem);
+      font-size:clamp(2.5rem, 5vw, 3.5rem);
       line-height:1;
       font-weight:800;
       letter-spacing:-.06em;
@@ -745,7 +745,7 @@
       transform:none;
     }
 
-    /* Dashboard/Configure Styles - Gray/White/Black Theme */
+    /* Dashboard/Configure Styles */
     .dashboard-container{
       max-width:900px;
       margin:0 auto;
@@ -1114,6 +1114,29 @@
       margin:20px 0;
     }
 
+    /* Purchase Tiers */
+    .tier-tabs{
+      display:flex;
+      gap:8px;
+      margin-bottom:20px;
+      justify-content:center;
+    }
+    .tier-tab{
+      padding:10px 20px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.04);
+      color:var(--muted);
+      cursor:pointer;
+      transition:all 0.2s;
+      font-weight:600;
+    }
+    .tier-tab.active{
+      background:var(--white);
+      color:#111;
+      border-color:var(--white);
+    }
+
     /* Locked State */
     .locked-overlay{
       position:absolute;
@@ -1132,11 +1155,27 @@
       font-size:0.9rem;
     }
 
+    .user-info{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      color:var(--muted);
+      font-size:0.85rem;
+    }
+    .user-avatar{
+      width:28px;
+      height:28px;
+      border-radius:50%;
+      border:1px solid var(--line);
+    }
+
     .hidden{display:none !important}
 
     @media (max-width: 1180px){
       .hero-grid,.dashboard,.footer-grid,.lifetime-card{grid-template-columns:1fr}
-      .services-grid,.plans-grid,.faq-grid,.founder-grid{grid-template-columns:1fr 1fr}
+      .services-grid{grid-template-columns:1fr 1fr}
+      .plans-grid{grid-template-columns:1fr 1fr}
+      .faq-grid,.founder-grid{grid-template-columns:1fr 1fr}
       .founder-card{grid-template-columns:auto 1fr}
       .founder-action{justify-self:start}
       .cta-card{grid-template-columns:1fr}
@@ -1187,6 +1226,7 @@
       .panel-card,.service-card,.price-card,.faq-item,.founder-card,.cta-card,.hero-card,.stat{padding:18px}
       .app-nav{align-items:flex-start; flex-direction:column}
       .app-links{width:100%}
+      .plans-grid{grid-template-columns:1fr}
     }
 
     @media (prefers-reduced-motion: reduce){
@@ -1207,9 +1247,9 @@
       <div class="nav-scroll" aria-label="All menu links">
         <div class="nav-links" id="navLinks">
           <a href="#" onclick="showView('landing')">Home</a>
-          <a href="#services" onclick="showView('landing')">Services</a>
-          <a href="#pricing" onclick="showView('landing')">Pricing</a>
-          <a href="#faq" onclick="showView('landing')">FAQ</a>
+          <a href="#services" onclick="showView('landing');setTimeout(()=>scrollToSection('services'),50)">Services</a>
+          <a href="#pricing" onclick="showView('landing');setTimeout(()=>scrollToSection('pricing'),50)">Pricing</a>
+          <a href="#faq" onclick="showView('landing');setTimeout(()=>scrollToSection('faq'),50)">FAQ</a>
           <button id="configureNavBtn" class="hidden" onclick="showView('dashboard')">Configure</button>
           <button id="manageNavBtn" class="hidden" onclick="showView('manage')">Manage</button>
         </div>
@@ -1223,7 +1263,7 @@
     <section class="hero">
       <div class="container hero-grid">
         <div class="reveal">
-          <span class="eyebrow"><span class="dot" aria-hidden="true"></span>Discord Auto Messenger • 24/7 cloud runner</span>
+          <span class="eyebrow"><span class="dot" aria-hidden="true"></span>Discord Auto Messenger &#x2022; 24/7 cloud runner</span>
           <h1>Automate channels, DMs, and scale harder.</h1>
           <p class="hero-copy">
             Send messages to multiple Discord channels, auto-reply to DMs, manage several accounts from one dashboard,
@@ -1392,50 +1432,84 @@
         <div class="pricing-intro reveal">
           <span class="eyebrow">Pricing</span>
           <h2>Choose Your Plan</h2>
-          <p>Unlock full access with keys or lifetime purchase.</p>
+          <p>Select a tier that fits your needs. All plans include core features.</p>
         </div>
+
+        <!-- V1 / V2 / V3 + Trial + Redeem -->
         <div class="plans-grid">
+          <!-- v1 Tier -->
           <article class="price-card reveal">
-            <span class="price-badge">Trial</span>
-            <div class="price-name">Free</div>
-            <div class="price-amount">10m</div>
-            <div class="price-sub">Full access trial</div>
+            <span class="price-badge">v1 Starter</span>
+            <div class="price-name">Starter</div>
+            <div class="price-amount">$10</div>
+            <div class="price-sub">One-time payment</div>
             <div class="divider"></div>
             <ul>
-              <li><span class="check">✓</span>1 Discord Account</li>
-              <li><span class="check">✓</span>All features</li>
-              <li><span class="check">✓</span>10 minutes access</li>
+              <li><span class="check">&#x2713;</span>1 Discord Account</li>
+              <li><span class="check">&#x2713;</span>Channel messaging</li>
+              <li><span class="check">&#x2713;</span>Basic DM auto-reply</li>
+              <li><span class="check">&#x2713;</span>Cloud execution</li>
             </ul>
-            <button class="btn" onclick="claimTrial()">Claim Trial</button>
+            <button class="btn-ghost" onclick="showPurchase('v1')">Buy v1</button>
           </article>
+
+          <!-- v2 Tier -->
           <article class="price-card reveal">
-            <span class="price-badge">Lifetime</span>
-            <div class="price-name">Full Access</div>
+            <span class="price-badge">v2 Pro</span>
+            <div class="price-name">Professional</div>
+            <div class="price-amount">$20</div>
+            <div class="price-sub">One-time payment</div>
+            <div class="divider"></div>
+            <ul>
+              <li><span class="check">&#x2713;</span>3 Discord Accounts</li>
+              <li><span class="check">&#x2713;</span>All v1 features</li>
+              <li><span class="check">&#x2713;</span>Advanced DM replies</li>
+              <li><span class="check">&#x2713;</span>Image attachments</li>
+              <li><span class="check">&#x2713;</span>Priority support</li>
+            </ul>
+            <button class="btn" onclick="showPurchase('v2')">Buy v2</button>
+          </article>
+
+          <!-- v3 Tier -->
+          <article class="price-card reveal">
+            <span class="price-badge">v3 Elite</span>
+            <div class="price-name">Elite</div>
             <div class="price-amount">$35</div>
             <div class="price-sub">One-time payment</div>
             <div class="divider"></div>
             <ul>
-              <li><span class="check">✓</span>Unlimited accounts*</li>
-              <li><span class="check">✓</span>All features forever</li>
-              <li><span class="check">✓</span>Future updates</li>
+              <li><span class="check">&#x2713;</span>Unlimited accounts</li>
+              <li><span class="check">&#x2713;</span>All v1 &amp; v2 features</li>
+              <li><span class="check">&#x2713;</span>Server joiner</li>
+              <li><span class="check">&#x2713;</span>Send all at once</li>
+              <li><span class="check">&#x2713;</span>Future updates</li>
+              <li><span class="check">&#x2713;</span>Priority support</li>
             </ul>
-            <button class="btn" onclick="showPurchase()">Purchase</button>
+            <button class="btn" onclick="showPurchase('v3')">Buy v3</button>
           </article>
+
+          <!-- Trial + Redeem Column -->
           <article class="price-card reveal">
-            <span class="price-badge">Redeem</span>
-            <div class="price-name">Access Key</div>
-            <div class="price-amount">Key</div>
-            <div class="price-sub">Have a key?</div>
+            <span class="price-badge">Trial</span>
+            <div class="price-name">Free Trial</div>
+            <div class="price-amount">10m</div>
+            <div class="price-sub">Full access trial</div>
             <div class="divider"></div>
             <ul>
-              <li><span class="check">✓</span>Redeem generated key</li>
-              <li><span class="check">✓</span>Instant access</li>
-              <li><span class="check">✓</span>All features</li>
+              <li><span class="check">&#x2713;</span>1 Discord Account</li>
+              <li><span class="check">&#x2713;</span>All features</li>
+              <li><span class="check">&#x2713;</span>10 minutes access</li>
             </ul>
+            <button class="btn" onclick="claimTrial()" style="margin-bottom:12px;">Claim Trial</button>
+
+            <div class="divider"></div>
+            <div class="price-name" style="font-size:1rem;">Have a key?</div>
+            <p style="color:var(--muted);font-size:0.85rem;margin-bottom:12px;">Redeem your Veiled Adv access key</p>
             <button class="btn-ghost" onclick="showRedeem()">Redeem Key</button>
           </article>
         </div>
-        <p style="text-align:center;color:var(--muted);margin-top:20px;font-size:0.9rem;">* Additional accounts cost $0.50 each after first</p>
+
+        <p style="text-align:center;color:var(--muted);margin-top:20px;font-size:0.9rem;">* Additional accounts beyond your tier cost $0.50 each</p>
       </div>
     </section>
 
@@ -1451,7 +1525,7 @@
           <article class="faq-item reveal">
             <details>
               <summary>How does it work?<span class="summary-icon">+</span></summary>
-              <p>Log in with Discord, redeem a key or start trial, then configure your automation settings in the dashboard.</p>
+              <p>Log in with Discord, choose a plan or start trial, then configure your automation settings in the dashboard.</p>
             </details>
           </article>
           <article class="faq-item reveal">
@@ -1463,7 +1537,7 @@
           <article class="faq-item reveal">
             <details>
               <summary>Can I use more than one account?<span class="summary-icon">+</span></summary>
-              <p>Yes. Purchase additional account slots for $0.50 each to run multiple campaigns.</p>
+              <p>Yes. v1 includes 1 account, v2 includes 3, and v3 includes unlimited accounts.</p>
             </details>
           </article>
           <article class="faq-item reveal">
@@ -1489,10 +1563,10 @@
             <div class="founder-avatar">V</div>
             <div class="founder-meta">
               <h3>Veiled</h3>
-              <div class="founder-role">Founder & Owner</div>
+              <div class="founder-role">Founder &amp; Owner</div>
               <div class="tag-row">
                 <span class="tag"><strong>Role:</strong> Owner</span>
-                <span class="tag"><strong>Focus:</strong> Vision & Product</span>
+                <span class="tag"><strong>Focus:</strong> Vision &amp; Product</span>
               </div>
             </div>
             <a class="btn founder-action" href="https://discord.gg/veiledadv" target="_blank">Contact</a>
@@ -1534,7 +1608,7 @@
             </div>
           </div>
           <div class="footer-bottom">
-            <div>© <span id="year">2026</span> Veiled Adv. All rights reserved.</div>
+            <div>&#xA9; <span id="year">2026</span> Veiled Adv. All rights reserved.</div>
             <div>Website developed by <strong>Veiled</strong></div>
           </div>
         </div>
@@ -1542,11 +1616,11 @@
     </footer>
   </main>
 
-  <!-- DASHBOARD VIEW (Locked until auth) -->
+  <!-- DASHBOARD VIEW -->
   <main id="dashboardView" class="dashboard-container">
     <div id="trialBanner" class="trial-banner hidden">
       <div class="trial-text">
-        <span>⚡ Trial Active</span>
+        <span>&#x26A1; Trial Active</span>
         <span class="trial-timer" id="trialTimer">10:00</span>
       </div>
     </div>
@@ -1567,7 +1641,7 @@
     <div class="form-group">
       <label class="section-title-dash">Advertisement Image (Optional)</label>
       <div class="image-upload" onclick="document.getElementById('imageInput').click()">
-        <div class="image-upload-icon">📷</div>
+        <div class="image-upload-icon">&#x1F4F7;</div>
         <div class="image-upload-text">Click to upload image<br>PNG, JPG, GIF up to 5MB</div>
         <img id="imagePreview" class="image-preview hidden">
       </div>
@@ -1581,7 +1655,7 @@
 
     <div class="toggle-row">
       <div class="toggle-info">
-        <h4>⚡ Send All At Once</h4>
+        <h4>&#x26A1; Send All At Once</h4>
         <p>Send to all channels simultaneously</p>
       </div>
       <div class="toggle-switch active" id="sendAllToggle" onclick="toggleSwitch(this)"></div>
@@ -1599,7 +1673,7 @@
 
     <div class="toggle-row">
       <div class="toggle-info">
-        <h4>💬 Auto-Reply</h4>
+        <h4>&#x1F4AC; Auto-Reply</h4>
         <p>Automatically reply to DMs and mentions</p>
       </div>
       <div class="toggle-switch" id="autoReplyToggle" onclick="toggleSwitch(this)"></div>
@@ -1658,12 +1732,28 @@
     </div>
   </div>
 
-  <!-- FLOATING GHOST ADMIN PANEL (Only for owner/co-owner) -->
-  <div class="ghost-fab" id="ghostFab" onclick="toggleAdminPanel()">👻</div>
+  <!-- PURCHASE TIER MODAL -->
+  <div class="modal-overlay" id="tierModal">
+    <div class="modal">
+      <h3 class="modal-title" id="tierModalTitle">Purchase Plan</h3>
+      <p style="color:var(--muted);margin-bottom:16px;" id="tierModalDesc">Complete your purchase</p>
+      <div class="price-display" id="tierPrice">$10</div>
+      <p style="color:var(--muted);font-size:0.85rem;margin-bottom:20px;">
+        Contact <strong>@veiled</strong> on Discord or join the server to complete payment via LTC.
+      </p>
+      <div style="display:flex;gap:12px;">
+        <button class="btn-ghost" onclick="hideModal('tierModal')" style="flex:1;">Cancel</button>
+        <a class="btn" href="https://discord.gg/veiledadv" target="_blank" style="flex:1;text-align:center;">Join Discord to Pay</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- FLOATING GHOST ADMIN PANEL -->
+  <div class="ghost-fab" id="ghostFab" onclick="toggleAdminPanel()">&#x1F47B;</div>
   <div class="admin-panel" id="adminPanel">
     <div class="admin-header">
-      <div class="admin-title">👻 Admin Panel</div>
-      <button class="admin-close" onclick="toggleAdminPanel()">×</button>
+      <div class="admin-title">&#x1F47B; Admin Panel</div>
+      <button class="admin-close" onclick="toggleAdminPanel()">&#xD7;</button>
     </div>
     <div class="admin-section">
       <div class="admin-section-title">Generate Key</div>
@@ -1672,8 +1762,8 @@
           <option value="lifetime">Lifetime</option>
           <option value="1h">1 Hour</option>
           <option value="24h">24 Hours</option>
-          <option value="168">7 Days</option>
-          <option value="720">30 Days</option>
+          <option value="7d">7 Days</option>
+          <option value="30d">30 Days</option>
         </select>
         <button class="btn btn-small" onclick="generateKey()">Generate</button>
       </div>
@@ -1697,97 +1787,168 @@
   </div>
 
   <script>
-    // State
+    // ==================== STATE ====================
     let currentUser = null;
     let hasAccess = false;
     let purchaseQty = 1;
     let imageBase64 = null;
+    let trialTimerInterval = null;
 
-    // Initialize
+    // ==================== INIT ====================
     function init(){
       checkAuth();
       setupReveal();
       document.getElementById('year').textContent = new Date().getFullYear();
     }
 
-    // View Management
+    // ==================== VIEW MANAGEMENT ====================
     function showView(view){
-      // Hide all views
       document.getElementById('landingView').style.display = 'none';
       document.getElementById('dashboardView').classList.remove('active');
       document.getElementById('manageView').classList.remove('active');
-      
-      // Show requested view
+
       if(view === 'landing'){
         document.getElementById('landingView').style.display = 'block';
       } else if(view === 'dashboard'){
+        if(!currentUser){
+          handleAuth();
+          return;
+        }
         if(!hasAccess){
-          alert('Please login and redeem a key or claim trial first');
+          alert('Please redeem a key, claim trial, or purchase a plan first');
+          showView('landing');
+          setTimeout(()=>scrollToSection('pricing'),100);
           return;
         }
         document.getElementById('dashboardView').classList.add('active');
+        loadConfigs();
       } else if(view === 'manage'){
+        if(!currentUser){
+          handleAuth();
+          return;
+        }
         if(!hasAccess){
-          alert('Please login and redeem a key or claim trial first');
+          alert('Please redeem a key, claim trial, or purchase a plan first');
+          showView('landing');
+          setTimeout(()=>scrollToSection('pricing'),100);
           return;
         }
         document.getElementById('manageView').classList.add('active');
+        loadConfigs();
       }
     }
 
     function scrollToSection(id){
-      document.getElementById(id).scrollIntoView({behavior:'smooth'});
+      const el = document.getElementById(id);
+      if(el) el.scrollIntoView({behavior:'smooth'});
     }
 
-    // Auth Simulation (replace with real API calls)
+    // ==================== AUTH (DISCORD OAUTH) ====================
+    // Redirect to Discord OAuth login via the bot
     function handleAuth(){
-      // Simulate Discord login
-      currentUser = {
-        id: '1473055478714990705',
-        username: 'Veiled',
-        avatar: null
-      };
-      updateUIForAuth();
+      if(currentUser){
+        logout();
+        return;
+      }
+      // Redirect to Discord OAuth - this goes to the bot's auth flow
+      window.location.href = '/login';
     }
 
-    function checkAuth(){
-      // Check if user has access (trial or purchased)
-      // This would check with your backend
+    async function checkAuth(){
+      try {
+        const res = await fetch('/api/user', { credentials: 'include' });
+        if(res.ok){
+          const user = await res.json();
+          currentUser = user;
+          hasAccess = user.purchased || user.trialActive;
+          updateUIForAuth();
+
+          if(user.trialActive && user.trialTimeLeft > 0){
+            document.getElementById('trialBanner').classList.remove('hidden');
+            startTrialTimer(user.trialTimeLeft);
+          }
+
+          // Update accounts display
+          document.getElementById('accountsCount').textContent =
+            (user.accountsPurchased || 0) + '/' + (user.accountsLimit || 1);
+        }
+      } catch(e) {
+        // Not logged in, show default state
+      }
     }
 
     function updateUIForAuth(){
-      document.getElementById('authBtn').textContent = 'Logout';
-      document.getElementById('authBtn').onclick = logout;
-      
-      // Show locked nav items but they'll check access
+      if(!currentUser) return;
+
+      const authBtn = document.getElementById('authBtn');
+      authBtn.textContent = 'Logout';
+      authBtn.onclick = logout;
+
+      // Show configure and manage buttons
       document.getElementById('configureNavBtn').classList.remove('hidden');
       document.getElementById('manageNavBtn').classList.remove('hidden');
-      
-      // Show ghost fab for owner
-      if(currentUser?.id === '1473055478714990705' || currentUser?.id === '883976984420556820'){
+
+      // Show ghost fab for admins
+      if(currentUser.isAdmin){
         document.getElementById('ghostFab').classList.add('show');
+      }
+
+      // Load admin data if admin
+      if(currentUser.isAdmin || currentUser.canGenerate){
+        loadKeys();
+        loadWhitelist();
       }
     }
 
     function logout(){
-      currentUser = null;
-      hasAccess = false;
-      location.reload();
+      fetch('/logout', { credentials: 'include' })
+        .then(() => {
+          currentUser = null;
+          hasAccess = false;
+          if(trialTimerInterval) clearInterval(trialTimerInterval);
+          window.location.reload();
+        })
+        .catch(() => window.location.reload());
     }
 
-    // Trial & Access
-    function claimTrial(){
-      hasAccess = true;
-      showView('dashboard');
-      document.getElementById('trialBanner').classList.remove('hidden');
-      startTrialTimer();
+    // ==================== TRIAL & ACCESS ====================
+    async function claimTrial(){
+      if(!currentUser){
+        // Not logged in - redirect to Discord OAuth first
+        window.location.href = '/login';
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/trial/claim', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await res.json();
+
+        if(data.success){
+          hasAccess = true;
+          document.getElementById('trialBanner').classList.remove('hidden');
+          startTrialTimer(data.timeLeft);
+          showView('dashboard');
+        } else {
+          alert(data.error || 'Failed to claim trial');
+        }
+      } catch(e) {
+        alert('Error claiming trial');
+      }
     }
 
-    function startTrialTimer(){
-      let timeLeft = 600; // 10 minutes
-      const timer = setInterval(()=>{
+    function startTrialTimer(secondsLeft){
+      if(trialTimerInterval) clearInterval(trialTimerInterval);
+
+      let timeLeft = secondsLeft;
+      const timerEl = document.getElementById('trialTimer');
+
+      trialTimerInterval = setInterval(()=>{
         if(timeLeft <= 0){
-          clearInterval(timer);
+          clearInterval(trialTimerInterval);
           hasAccess = false;
           alert('Trial expired');
           showView('landing');
@@ -1796,34 +1957,71 @@
         timeLeft--;
         const mins = Math.floor(timeLeft/60);
         const secs = timeLeft%60;
-        document.getElementById('trialTimer').textContent = `${mins}:${secs.toString().padStart(2,'0')}`;
+        timerEl.textContent = mins + ':' + secs.toString().padStart(2,'0');
       },1000);
+
+      // Initial display
+      const mins = Math.floor(timeLeft/60);
+      const secs = timeLeft%60;
+      timerEl.textContent = mins + ':' + secs.toString().padStart(2,'0');
     }
 
     function showRedeem(){
+      if(!currentUser){
+        window.location.href = '/login';
+        return;
+      }
       document.getElementById('redeemModal').classList.add('show');
     }
 
-    function showPurchase(){
-      alert('LTC payment integration would open here');
+    function showPurchase(tier){
+      if(!currentUser){
+        window.location.href = '/login';
+        return;
+      }
+
+      const prices = { v1: '$10', v2: '$20', v3: '$35' };
+      const names = { v1: 'Starter (v1)', v2: 'Professional (v2)', v3: 'Elite (v3)' };
+
+      document.getElementById('tierModalTitle').textContent = 'Purchase ' + names[tier];
+      document.getElementById('tierPrice').textContent = prices[tier];
+      document.getElementById('tierModal').classList.add('show');
     }
 
     function hideModal(id){
       document.getElementById(id).classList.remove('show');
     }
 
-    function redeemKey(){
-      const key = document.getElementById('redeemKeyInput').value;
-      if(key && key.startsWith('VEILED-')){
-        hasAccess = true;
-        hideModal('redeemModal');
-        showView('dashboard');
-      } else {
-        alert('Invalid key format');
+    async function redeemKey(){
+      const key = document.getElementById('redeemKeyInput').value.trim().toUpperCase();
+      if(!key || !key.startsWith('VEILED-')){
+        alert('Invalid key format. Must start with VEILED-');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/redeem', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key })
+        });
+        const data = await res.json();
+
+        if(data.success){
+          hasAccess = true;
+          hideModal('redeemModal');
+          alert('Access granted! Welcome to Veiled Adv.');
+          showView('dashboard');
+        } else {
+          alert(data.error || 'Invalid key');
+        }
+      } catch(e) {
+        alert('Error redeeming key');
       }
     }
 
-    // Dashboard Functions
+    // ==================== DASHBOARD FUNCTIONS ====================
     function toggleSwitch(el){
       el.classList.toggle('active');
       if(el.id === 'autoReplyToggle'){
@@ -1843,23 +2041,157 @@
       reader.readAsDataURL(file);
     }
 
-    function startBot(){
+    async function startBot(){
       const token = document.getElementById('discordToken').value;
       const channels = document.getElementById('channelIds').value;
       const message = document.getElementById('message').value;
-      
+      const delay = document.getElementById('delay').value;
+      const autoReplyEnabled = document.getElementById('autoReplyToggle').classList.contains('active');
+      const autoReplyText = document.getElementById('autoReplyText').value;
+      const sendAllAtOnce = document.getElementById('sendAllToggle').classList.contains('active');
+
+      if(!token || !channels || !message){
+        alert('Please fill in all required fields (Token, Channels, Message)');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/bot/start', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token, channels, message, delay,
+            autoReplyEnabled, autoReplyText,
+            sendAllAtOnce,
+            imageUrl: imageBase64
+          })
+        });
+        const data = await res.json();
+
+        if(data.success){
+          alert('Bot started as ' + data.username + '!');
+          loadConfigs();
+        } else {
+          alert(data.error || 'Failed to start bot');
+        }
+      } catch(e) {
+        alert('Error starting bot. Make sure you have access.');
+      }
+    }
+
+    async function saveConfig(){
+      // Save config without starting the bot
+      const token = document.getElementById('discordToken').value;
+      const channels = document.getElementById('channelIds').value;
+      const message = document.getElementById('message').value;
+      const delay = document.getElementById('delay').value;
+      const autoReplyEnabled = document.getElementById('autoReplyToggle').classList.contains('active');
+      const autoReplyText = document.getElementById('autoReplyText').value;
+      const sendAllAtOnce = document.getElementById('sendAllToggle').classList.contains('active');
+
       if(!token || !channels || !message){
         alert('Please fill in all required fields');
         return;
       }
-      
-      alert('Bot started! (Connect to backend for real functionality)');
+
+      try {
+        const res = await fetch('/api/bot/start', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token, channels, message, delay,
+            autoReplyEnabled, autoReplyText,
+            sendAllAtOnce,
+            imageUrl: imageBase64
+          })
+        });
+        const data = await res.json();
+
+        if(data.success){
+          alert('Config saved!');
+          loadConfigs();
+        } else {
+          alert(data.error || 'Failed to save config');
+        }
+      } catch(e) {
+        alert('Error saving config');
+      }
     }
 
-    function saveConfig(){
-      alert('Config saved');
+    async function loadConfigs(){
+      try {
+        const res = await fetch('/api/bot/configs', { credentials: 'include' });
+        if(!res.ok) return;
+        const data = await res.json();
+
+        const list = document.getElementById('configsList');
+        if(!data.configs || data.configs.length === 0){
+          list.innerHTML = '<p style="color:var(--muted);">No active configurations</p>';
+          return;
+        }
+
+        list.innerHTML = data.configs.map(cfg => {
+          const statusClass = cfg.active ? 'status-active' : 'status-inactive';
+          const statusText = cfg.active ? 'Active' : 'Stopped';
+          return '<div class="config-card-dash">' +
+            '<div class="config-header">' +
+              '<span class="config-title">' + (cfg.username || 'Unknown') + '</span>' +
+              '<span class="status-badge ' + statusClass + '">' + statusText + '</span>' +
+            '</div>' +
+            '<p style="color:var(--muted);font-size:0.85rem;margin-bottom:8px;">Channels: ' + cfg.channels + '</p>' +
+            '<p style="color:var(--muted);font-size:0.85rem;margin-bottom:12px;">Delay: ' + cfg.delay_seconds + 's</p>' +
+            '<div style="display:flex;gap:8px;">' +
+              (cfg.active
+                ? '<button class="btn-ghost btn-small" onclick="stopBot(\'' + cfg.id + '\')">Stop</button>'
+                : '<button class="btn btn-small" onclick="startBot()">Start</button>') +
+              '<button class="btn-ghost btn-small" onclick="deleteConfig(\'' + cfg.id + '\')" style="color:#ff6b6b;">Delete</button>' +
+            '</div>' +
+          '</div>';
+        }).join('');
+      } catch(e) {
+        // Silent fail
+      }
     }
 
+    async function stopBot(configId){
+      try {
+        const res = await fetch('/api/bot/stop', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ configId })
+        });
+        const data = await res.json();
+        if(data.success){
+          alert('Bot stopped');
+          loadConfigs();
+        }
+      } catch(e) {
+        alert('Error stopping bot');
+      }
+    }
+
+    async function deleteConfig(configId){
+      if(!confirm('Delete this configuration?')) return;
+      try {
+        const res = await fetch('/api/bot/delete', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ configId })
+        });
+        const data = await res.json();
+        if(data.success){
+          loadConfigs();
+        }
+      } catch(e) {
+        alert('Error deleting config');
+      }
+    }
+
+    // ==================== PURCHASE SLOTS ====================
     function showPurchaseModal(){
       document.getElementById('purchaseModal').classList.add('show');
       updatePrice();
@@ -1873,34 +2205,137 @@
 
     function updatePrice(){
       const total = (purchaseQty * 0.50).toFixed(2);
-      document.getElementById('totalPrice').textContent = `$${total}`;
+      document.getElementById('totalPrice').textContent = '$' + total;
     }
 
-    function purchaseSlots(){
-      alert(`Purchased ${purchaseQty} slot(s)`);
-      hideModal('purchaseModal');
+    async function purchaseSlots(){
+      try {
+        const res = await fetch('/api/admin/purchase-accounts', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amount: purchaseQty })
+        });
+        const data = await res.json();
+        if(data.success){
+          alert('Purchased ' + purchaseQty + ' slot(s)! New limit: ' + data.newLimit);
+          document.getElementById('accountsCount').textContent = data.newLimit + '/' + data.newLimit;
+          hideModal('purchaseModal');
+        } else {
+          alert(data.error || 'Purchase failed');
+        }
+      } catch(e) {
+        alert('Error purchasing slots. Join Discord to buy manually.');
+      }
     }
 
-    // Admin Panel
+    // ==================== ADMIN PANEL ====================
     function toggleAdminPanel(){
       document.getElementById('adminPanel').classList.toggle('show');
     }
 
-    function generateKey(){
-      const duration = document.getElementById('keyDuration').value;
-      const key = 'VEILED-' + Math.random().toString(36).substring(2,10).toUpperCase();
-      alert(`Generated key: ${key} (${duration})`);
-    }
+    async function loadKeys(){
+      try {
+        const res = await fetch('/api/admin/keys', { credentials: 'include' });
+        if(!res.ok) return;
+        const data = await res.json();
 
-    function addToWhitelist(){
-      const id = document.getElementById('whitelistId').value;
-      if(id){
-        alert(`Added ${id} to whitelist`);
-        document.getElementById('whitelistId').value = '';
+        const list = document.getElementById('keyList');
+        if(!data.keys || data.keys.length === 0){
+          list.innerHTML = '<p style="color:var(--muted);font-size:0.85rem;">No keys generated</p>';
+          return;
+        }
+
+        list.innerHTML = data.keys.map(k => {
+          const status = k.active ? 'Active' : 'Revoked';
+          return '<div class="key-item">' +
+            '<span>' + k.key + ' (' + k.duration + ')</span>' +
+            '<span style="font-size:0.7rem;color:var(--muted);">' + status + '</span>' +
+          '</div>';
+        }).join('');
+      } catch(e) {
+        // Silent fail
       }
     }
 
-    // Reveal Animation
+    async function generateKey(){
+      const duration = document.getElementById('keyDuration').value;
+      try {
+        const res = await fetch('/api/admin/keys/generate', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ duration })
+        });
+        const data = await res.json();
+        if(data.success){
+          alert('Generated: ' + data.key.key);
+          loadKeys();
+        }
+      } catch(e) {
+        alert('Error generating key');
+      }
+    }
+
+    async function loadWhitelist(){
+      try {
+        const res = await fetch('/api/admin/whitelist', { credentials: 'include' });
+        if(!res.ok) return;
+        const data = await res.json();
+
+        const list = document.getElementById('whitelistList');
+        if(!data.whitelist || data.whitelist.length === 0){
+          list.innerHTML = '<p style="color:var(--muted);font-size:0.85rem;">No whitelisted users</p>';
+          return;
+        }
+
+        list.innerHTML = data.whitelist.map(id =>
+          '<div class="whitelist-item">' +
+            '<span>' + id + '</span>' +
+            '<button class="btn-ghost btn-small" onclick="removeFromWhitelist(\'' + id + '\')">Remove</button>' +
+          '</div>'
+        ).join('');
+      } catch(e) {
+        // Silent fail
+      }
+    }
+
+    async function addToWhitelist(){
+      const userId = document.getElementById('whitelistId').value.trim();
+      if(!userId) return;
+      try {
+        const res = await fetch('/api/admin/whitelist/add', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId })
+        });
+        const data = await res.json();
+        if(data.success){
+          document.getElementById('whitelistId').value = '';
+          loadWhitelist();
+        }
+      } catch(e) {
+        alert('Error adding to whitelist');
+      }
+    }
+
+    async function removeFromWhitelist(userId){
+      try {
+        const res = await fetch('/api/admin/whitelist/remove', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId })
+        });
+        const data = await res.json();
+        if(data.success) loadWhitelist();
+      } catch(e) {
+        alert('Error removing from whitelist');
+      }
+    }
+
+    // ==================== REVEAL ANIMATION ====================
     function setupReveal(){
       const items = document.querySelectorAll('.reveal');
       if('IntersectionObserver' in window){
@@ -1918,7 +2353,7 @@
       }
     }
 
-    // Start
+    // ==================== START ====================
     init();
   </script>
 </body>
