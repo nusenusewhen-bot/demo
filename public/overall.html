@@ -697,7 +697,7 @@
           <article class="price-card reveal">
             <span class="price-badge">v2</span>
             <div class="price-name">Professional</div>
-            <div class="price-amount">$2</div>
+            <div class="price-amount">$1.50</div>
             <div class="price-sub">per month</div>
             <div class="divider"></div>
             <ul>
@@ -742,7 +742,7 @@
               <li><span class="check">&#x2713;</span>Server joiner</li>
               <li><span class="check">&#x2713;</span>Send all at once</li>
             </ul>
-            <button class="btn-success" style="width:100%;margin-top:auto;" onclick="startPurchase('v3-lifetime')">Buy Lifetime</button>
+            <button class="btn" onclick="startPurchase('v3-lifetime')">Buy Lifetime</button>
           </article>
           <!-- Trial + Redeem -->
           <article class="price-card reveal">
@@ -945,6 +945,9 @@
     <div id="trialBanner" class="trial-banner hidden">
       <div class="trial-text"><span>&#x26A1; Trial Active</span><span class="trial-timer" id="trialTimer">10:00</span></div>
     </div>
+    <div id="botStatus" class="accounts-bar hidden" style="background:linear-gradient(90deg, rgba(125,247,165,.15), rgba(125,247,165,.05));border-color:var(--success);">
+      <div class="accounts-info"><span class="accounts-count" style="color:var(--success);font-size:1rem;">&#x2705; Logged in as <strong id="botUsername">@user</strong></span><span style="color:var(--muted);">Bot is running</span></div>
+    </div>
     <div class="accounts-bar">
       <div class="accounts-info"><span class="accounts-count" id="accountsCount">0/1</span><span style="color:var(--muted);">Active Accounts</span></div>
       <button class="buy-slot-btn" onclick="showPurchaseModal()">+ Buy Slot ($0.50)</button>
@@ -1014,8 +1017,9 @@
     <div class="admin-header"><div class="admin-title">&#x1F47B; Admin Panel</div><button class="admin-close" onclick="toggleAdminPanel()">&#xD7;</button></div>
     <div class="admin-section">
       <div class="admin-section-title">Generate Key</div>
-      <div style="display:flex;gap:8px;margin-bottom:12px;">
-        <select id="keyDuration" class="form-input" style="flex:1;"><option value="lifetime">Lifetime</option><option value="1h">1 Hour</option><option value="24h">24 Hours</option><option value="7d">7 Days</option><option value="30d">30 Days</option></select>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+        <select id="keyDuration" class="form-input" style="flex:1;min-width:120px;"><option value="lifetime">Lifetime</option><option value="1h">1 Hour</option><option value="24h">24 Hours</option><option value="7d">7 Days</option><option value="30d">30 Days</option></select>
+        <select id="keyTier" class="form-input" style="flex:1;min-width:100px;"><option value="v1">v1 ($1)</option><option value="v2">v2 ($1.50)</option><option value="v3">v3 ($2.50)</option></select>
         <button class="btn btn-small" onclick="generateKey()">Generate</button>
       </div>
     </div>
@@ -1463,7 +1467,11 @@
           })
         });
         const data = await res.json();
-        if(data.success){ alert('Bot started as ' + data.username + '!'); loadConfigs(); }
+        if(data.success){ 
+          document.getElementById('botStatus').classList.remove('hidden');
+          document.getElementById('botUsername').textContent = '@' + (data.username || 'user');
+          loadConfigs(); 
+        }
         else { alert(data.error || 'Failed to start bot'); }
       } catch(e) { alert('Error starting bot'); }
     }
@@ -1522,7 +1530,10 @@
           body: JSON.stringify({ configId })
         });
         const data = await res.json();
-        if(data.success){ alert('Bot stopped'); loadConfigs(); }
+        if(data.success){ 
+          document.getElementById('botStatus').classList.add('hidden');
+          loadConfigs(); 
+        }
       } catch(e) { alert('Error stopping bot'); }
     }
 
@@ -1567,20 +1578,23 @@
         if(!data.keys || data.keys.length === 0){ list.innerHTML = '<p style="color:var(--muted);font-size:0.85rem;">No keys generated</p>'; return; }
         list.innerHTML = data.keys.map(k => {
           const status = k.active ? 'Active' : 'Revoked';
-          return '<div class="key-item"><span>' + k.key + ' (' + k.duration + ')</span><span style="font-size:0.7rem;color:var(--muted);">' + status + '</span></div>';
+          const tierLabel = k.tier ? k.tier.toUpperCase() : 'V1';
+          return '<div class="key-item"><span>' + k.key + ' (' + tierLabel + ' | ' + k.duration + ')</span><span style="font-size:0.7rem;color:var(--muted);">' + status + '</span></div>';
         }).join('');
       } catch(e) {}
     }
 
     async function generateKey(){
       const duration = document.getElementById('keyDuration').value;
+      const tier = document.getElementById('keyTier').value;
       try {
         const res = await fetch('/api/admin/keys/generate', {
           method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ duration })
+          body: JSON.stringify({ duration, tier })
         });
         const data = await res.json();
-        if(data.success){ alert('Generated: ' + data.key.key); loadKeys(); }
+        if(data.success){ alert('Generated: ' + data.key.key + ' (' + data.key.tier + ')'); loadKeys(); }
+        else { alert(data.error || 'Failed to generate key'); }
       } catch(e) { alert('Error generating key'); }
     }
 
