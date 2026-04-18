@@ -1,0 +1,1475 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Veiled.gg</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+    <style>
+        * { box-sizing: border-box; }
+        body { 
+            background: #0a0a0a; 
+            color: #e5e5e5; 
+            font-size: 15px; 
+            margin: 0; 
+            padding: 0; 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+        }
+        .accent { color: #ffffff; }
+        .btn-accent { 
+            background: #ffffff; 
+            color: #0a0a0a; 
+            font-weight: 700; 
+            border: none; 
+            cursor: pointer; 
+            display: inline-block; 
+            position: relative;
+            z-index: 10;
+            pointer-events: auto;
+        }
+        .btn-accent:hover { background: #d4d4d4; }
+        .btn-accent:disabled { background: #444; color: #888; cursor: not-allowed; opacity: 0.6; }
+        .btn-purple { 
+            background: #666; 
+            color: #fff; 
+            font-weight: 700; 
+            border: none; 
+            cursor: pointer; 
+            display: inline-block;
+            position: relative;
+            z-index: 10;
+            pointer-events: auto;
+        }
+        .btn-purple:hover { background: #555; }
+        .btn-blue { background: #444; color: #fff; font-weight: 700; border: none; cursor: pointer; display: inline-block; }
+        .btn-blue:hover { background: #555; }
+        .btn-green {
+            background: #e5e5e5;
+            color: #0a0a0a;
+            font-weight: 700;
+            border: none;
+            cursor: pointer;
+            display: inline-block;
+            position: relative;
+            z-index: 10;
+            pointer-events: auto;
+        }
+        .btn-green:hover { background: #d4d4d4; }
+        .btn-green:disabled { background: #444; color: #888; cursor: not-allowed; opacity: 0.6; }
+        .btn-orange {
+            background: #888;
+            color: #fff;
+            font-weight: 700;
+            border: none;
+            cursor: pointer;
+            display: inline-block;
+            position: relative;
+            z-index: 10;
+            pointer-events: auto;
+        }
+        .btn-orange:hover { background: #777; }
+        .card { 
+            background: #141414; 
+            border: 1px solid #222; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3); 
+        }
+        .nav-link { 
+            text-decoration: none; 
+            color: #666; 
+            display: inline-block; 
+            cursor: pointer; 
+            white-space: nowrap; 
+            flex-shrink: 0; 
+            padding: 8px 12px; 
+            background: none; 
+            border: none; 
+            border-bottom: 3px solid transparent;
+            pointer-events: auto;
+            position: relative;
+            z-index: 20;
+        }
+        .nav-link.active { 
+            color: #fff; 
+            border-bottom: 3px solid #fff;
+            text-shadow: 0 0 10px rgba(255,255,255,0.3);
+        }
+        .nav-link:hover { color: #ccc; }
+        .section { 
+            display: none; 
+            pointer-events: auto;
+        }
+        .section.active { 
+            display: block; 
+            animation: fadeIn 0.3s ease-in;
+            pointer-events: auto;
+        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .address-box { 
+            font-family: 'Courier New', monospace; 
+            word-break: break-all; 
+            font-size: 14px; 
+            background: #0f0f0f; 
+            padding: 12px; 
+            border-radius: 8px; 
+            border: 1px solid #444; 
+            color: #fff; 
+            box-shadow: 0 0 10px rgba(255,255,255,0.05); 
+        }
+        .modal { 
+            display: none; 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            background: rgba(0,0,0,0.85); 
+            z-index: 1000; 
+            align-items: center; 
+            justify-content: center; 
+            backdrop-filter: blur(4px);
+            pointer-events: auto;
+        }
+        .modal.active { display: flex; }
+        .user-avatar { 
+            width: 32px; 
+            height: 32px; 
+            border-radius: 50%; 
+            object-fit: cover; 
+            border: 2px solid #444; 
+        }
+        .error-text { color: #ff6b6b; font-size: 14px; margin-top: 8px; }
+        .success-text { color: #7ee787; font-size: 14px; margin-top: 8px; }
+        .redeem-section { 
+            border: 2px dashed #444; 
+            border-radius: 16px; 
+            padding: 20px; 
+            margin-bottom: 20px; 
+            background: rgba(255,255,255,0.03); 
+        }
+        .trial-section {
+            border: 2px dashed #555;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background: rgba(255,255,255,0.02);
+        }
+        .generate-section {
+            border: 2px dashed #555;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background: rgba(255,255,255,0.02);
+        }
+        .whitelist-section {
+            border: 2px dashed #444;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background: rgba(255,255,255,0.02);
+        }
+        .toggle-wrapper { 
+            position: relative; 
+            display: inline-block; 
+            width: 50px; 
+            height: 26px; 
+            cursor: pointer;
+            pointer-events: auto;
+            z-index: 10;
+        }
+        .toggle-input { 
+            opacity: 0; 
+            width: 0; 
+            height: 0; 
+            position: absolute;
+            cursor: pointer;
+        }
+        .toggle-slider { 
+            position: absolute; 
+            cursor: pointer; 
+            top: 0; 
+            left: 0; 
+            right: 0; 
+            bottom: 0; 
+            background-color: #333; 
+            transition: .4s; 
+            border-radius: 34px; 
+            pointer-events: auto;
+        }
+        .toggle-slider:before { 
+            position: absolute; 
+            content: ""; 
+            height: 18px; 
+            width: 18px; 
+            left: 4px; 
+            bottom: 4px; 
+            background-color: #666; 
+            transition: .4s; 
+            border-radius: 50%; 
+        }
+        .toggle-input:checked + .toggle-slider { background-color: #555; }
+        .toggle-input:checked + .toggle-slider:before { transform: translateX(24px); background-color: #fff; }
+        .account-card { 
+            background: #141414; 
+            border: 1px solid #222; 
+            border-radius: 12px; 
+            padding: 16px; 
+            margin-bottom: 12px; 
+            transition: all 0.2s;
+            pointer-events: auto;
+        }
+        .account-card:hover { 
+            border-color: #444; 
+            box-shadow: 0 0 20px rgba(255,255,255,0.05); 
+        }
+        .account-active { 
+            border-color: #444; 
+            background: rgba(255,255,255,0.03); 
+        }
+        .status-badge { 
+            display: inline-block; 
+            padding: 4px 12px; 
+            border-radius: 9999px; 
+            font-size: 12px; 
+            font-weight: 600; 
+        }
+        .status-running { background: #1a2a1a; color: #7ee787; }
+        .status-stopped { background: #1a1a1a; color: #888; }
+        .feature-check { color: #7ee787; margin-right: 8px; }
+        .feature-x { color: #444; margin-right: 8px; }
+        .image-preview { 
+            max-width: 200px; 
+            max-height: 200px; 
+            border-radius: 8px; 
+            border: 2px dashed #333; 
+            object-fit: cover;
+            cursor: pointer;
+        }
+        .image-preview.has-image { 
+            border-color: #444; 
+            border-style: solid; 
+        }
+        .upload-area { 
+            border: 2px dashed #333; 
+            border-radius: 12px; 
+            padding: 30px; 
+            text-align: center; 
+            cursor: pointer; 
+            transition: all 0.2s; 
+            background: #0f0f0f;
+            pointer-events: auto;
+            position: relative;
+            z-index: 5;
+        }
+        .upload-area:hover { 
+            border-color: #555; 
+            background: rgba(255,255,255,0.02); 
+        }
+        .upload-area.has-file { 
+            border-color: #444; 
+            background: rgba(255,255,255,0.01); 
+        }
+        input, textarea, select { 
+            font-family: inherit; 
+            outline: none; 
+            transition: all 0.2s;
+            pointer-events: auto;
+            background: #0f0f0f;
+            color: #e5e5e5;
+            border: 1px solid #2a2a2a;
+        }
+        input:focus, textarea:focus, select:focus { 
+            border-color: #555 !important; 
+            box-shadow: 0 0 0 3px rgba(255,255,255,0.05); 
+        }
+        button { 
+            transition: all 0.2s; 
+            position: relative; 
+            overflow: hidden; 
+            cursor: pointer;
+            pointer-events: auto;
+        }
+        button:active { transform: scale(0.98); }
+        .clickable { 
+            cursor: pointer;
+            pointer-events: auto;
+        }
+        .hidden { display: none !important; }
+        #image-input { 
+            position: absolute; 
+            opacity: 0; 
+            width: 0; 
+            height: 0;
+            pointer-events: none;
+        }
+        .form-label { 
+            display: block; 
+            font-size: 12px; 
+            color: #666; 
+            margin-bottom: 8px; 
+            font-weight: 500; 
+            text-transform: uppercase; 
+            letter-spacing: 0.05em; 
+        }
+        
+        .nav-wrapper {
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            flex: 1;
+            margin: 0 12px;
+            pointer-events: auto;
+        }
+        .nav-wrapper::-webkit-scrollbar { display: none; }
+        .nav-container {
+            display: flex;
+            gap: 8px;
+            min-width: min-content;
+        }
+        
+        .activity-card { 
+            background: #111; 
+            border: 1px solid #222; 
+            border-radius: 16px; 
+            padding: 20px; 
+            margin-bottom: 16px;
+            pointer-events: auto;
+        }
+        .activity-pending { border-color: #555; }
+        .activity-completed { border-color: #444; }
+        .activity-expired { border-color: #444; }
+        .activity-trial { border-color: #555; }
+        .countdown { 
+            font-family: 'Courier New', monospace; 
+            font-size: 18px; 
+            color: #aaa; 
+        }
+        .trial-timer {
+            font-family: 'Courier New', monospace;
+            font-size: 24px;
+            color: #7ee787;
+            font-weight: bold;
+        }
+        .address-history-item { 
+            background: #141414; 
+            border-radius: 8px; 
+            padding: 12px; 
+            margin-bottom: 8px; 
+            font-size: 12px;
+            pointer-events: auto;
+        }
+        
+        .key-card {
+            background: #141414;
+            border: 1px solid #222;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+        .key-active { border-left: 3px solid #7ee787; }
+        .key-revoked { border-left: 3px solid #ff6b6b; opacity: 0.7; }
+        .key-expired { border-left: 3px solid #666; opacity: 0.7; }
+
+        .tier-card {
+            background: #141414;
+            border: 1px solid #222;
+            border-radius: 20px;
+            padding: 28px;
+            transition: all 0.25s;
+        }
+        .tier-card:hover { border-color: #444; transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+        .tier-card.featured { border-color: #444; }
+        .tier-badge {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding: 4px 12px;
+            border-radius: 999px;
+            display: inline-block;
+            margin-bottom: 12px;
+        }
+        .tier-badge-white { background: #fff; color: #0a0a0a; }
+        .tier-badge-gray { background: #1a1a1a; color: #fff; border: 1px solid #333; }
+
+        .login-bg {
+            background: radial-gradient(ellipse at top, #1a1a1a 0%, #0a0a0a 60%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 16px;
+        }
+        
+        .progress-bar {
+            height: 4px;
+            background: #222;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background: #fff;
+            border-radius: 2px;
+            transition: width 0.5s ease;
+        }
+
+        @media (max-width: 640px) {
+            .nav-link { padding: 6px 10px; font-size: 13px; }
+            .nav-wrapper { margin: 0 8px; }
+        }
+    </style>
+</head>
+<body class="min-h-screen pb-20">
+
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen" class="login-bg">
+        <div class="w-full max-w-sm" style="animation: fadeIn 0.4s ease;">
+            <div class="text-center mb-10">
+                <div class="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-6">
+                    <i class="fa-solid fa-ghost text-2xl" style="color: #0a0a0a;"></i>
+                </div>
+                <h1 class="text-3xl font-bold text-white mb-2">Veiled.gg</h1>
+                <p class="text-sm" style="color: #555;">Discord Advertising Automation</p>
+            </div>
+            <div class="card rounded-2xl p-6">
+                <label class="form-label">Discord User ID</label>
+                <input id="login-id" type="text" placeholder="Enter your Discord User ID" class="w-full rounded-2xl px-5 py-4 text-sm mb-4">
+                <p class="text-xs mb-4" style="color: #444;">Your numeric Discord ID. Right-click your profile in Discord → Copy User ID.</p>
+                <button onclick="doLogin()" class="w-full btn-accent py-3.5 rounded-2xl text-sm font-bold">
+                    <i class="fa-solid fa-arrow-right mr-2"></i>Enter Demo
+                </button>
+                <p class="text-xs text-center mt-4" style="color: #333;">Demo mode — no real authentication required</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN APP -->
+    <div id="main-app" class="hidden">
+
+    <div id="logout-modal" class="modal" onclick="if(event.target === this) closeLogoutModal()">
+        <div class="card rounded-3xl p-8 max-w-sm mx-4 w-full" style="position: relative; z-index: 1001;">
+            <h3 class="text-xl font-bold text-white mb-4">Confirm Logout</h3>
+            <p class="text-sm mb-4" style="color: #666;">Are you sure you want to logout?</p>
+            <div class="flex gap-3">
+                <button onclick="closeLogoutModal()" class="flex-1 py-3 rounded-2xl text-sm" style="background: #1a1a1a; border: 1px solid #333; color: #fff;">Cancel</button>
+                <button onclick="confirmLogout()" class="flex-1 btn-accent py-3 rounded-2xl text-sm">Logout</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="extra-modal" class="modal" onclick="if(event.target === this) closeExtraModal()">
+        <div class="card rounded-3xl p-6 max-w-sm mx-4 w-full" style="position: relative; z-index: 1001;">
+            <h3 class="text-lg font-bold text-white mb-2">Account Limit Reached</h3>
+            <p class="text-sm mb-4" style="color: #666;">Your <strong id="extra-tier" class="text-white">V1</strong> plan supports <strong id="extra-limit" class="text-white">1</strong> account(s). Add an extra config for <strong class="text-white">$0.50/month</strong>?</p>
+            <div class="flex gap-3">
+                <button onclick="buyExtraConfig()" class="flex-1 btn-accent py-3 rounded-2xl text-sm">Add $0.50/mo</button>
+                <button onclick="closeExtraModal()" class="flex-1 py-3 rounded-2xl text-sm" style="background: #1a1a1a; border: 1px solid #333; color: #fff;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <header class="sticky top-0 z-50" style="background: rgba(10,10,10,0.95); border-bottom: 1px solid #1a1a1a; backdrop-filter: blur(8px);">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-3 clickable" onclick="switchTab(0)" style="cursor: pointer; flex-shrink: 0;">
+                <div class="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
+                    <i class="fa-solid fa-ghost text-sm" style="color: #0a0a0a;"></i>
+                </div>
+                <h1 class="text-xl font-bold" style="color: #fff; white-space: nowrap;">Veiled.gg</h1>
+            </div>
+            
+            <div class="nav-wrapper" id="nav-scroll">
+                <nav class="nav-container text-sm font-medium">
+                    <button class="nav-link active" id="nav-0" data-tab="0">Main</button>
+                    <button class="nav-link" id="nav-1" data-tab="1">Purchase</button>
+                    <button class="nav-link hidden" id="nav-2" data-tab="2">Configure</button>
+                    <button class="nav-link hidden" id="nav-3" data-tab="3">Purchase Logs</button>
+                    <button class="nav-link hidden" id="nav-4" data-tab="4">Generate</button>
+                    <button class="nav-link hidden" id="nav-5" data-tab="5">Whitelist</button>
+                </nav>
+            </div>
+            
+            <div class="flex items-center gap-3" style="flex-shrink: 0;">
+                <div id="user-display" class="flex items-center gap-2">
+                    <span class="text-xs px-3 py-1 rounded-full" style="background: #1a1a1a; color: #666;">Loading...</span>
+                </div>
+                <button onclick="initiateLogout()" class="text-zinc-600 hover:text-white" style="background: none; border: none; padding: 8px; border-radius: 8px; cursor: pointer;">
+                    <i class="fa-solid fa-right-from-bracket"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="max-w-5xl mx-auto px-4 py-6">
+        <!-- SECTION 0: MAIN / DASHBOARD -->
+        <div id="section-0" class="section active">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-6">
+                <div class="card rounded-3xl p-6">
+                    <h3 class="text-sm" style="color: #666; text-transform: uppercase; letter-spacing: 0.05em;">Plan</h3>
+                    <div id="credits-display" class="text-4xl font-bold text-white mt-3">Free</div>
+                    <p id="credits-sub" class="text-xs mt-2 hidden" style="color: #444;">Renews monthly</p>
+                </div>
+                <div class="card rounded-3xl p-6">
+                    <h3 class="text-sm" style="color: #666; text-transform: uppercase; letter-spacing: 0.05em;">Accounts</h3>
+                    <div id="accounts-display" class="text-4xl font-bold text-white mt-3">0 / 0</div>
+                    <div class="progress-bar">
+                        <div id="accounts-bar" class="progress-bar-fill" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div class="card rounded-3xl p-6">
+                    <h3 class="text-lg font-semibold mb-4" style="color: #fff;">Access</h3>
+                    <div id="status-box" class="p-5 rounded-2xl text-center" style="background: #0f0f0f;">
+                        <p id="status-text" class="text-xl font-medium" style="color: #888;">Not Subscribed</p>
+                        <button onclick="switchTab(1)" class="mt-5 w-full btn-accent py-3.5 rounded-2xl text-base" style="border: none;">View Plans</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Your Features -->
+            <div class="card rounded-3xl p-6 max-w-lg mx-auto" id="features-card">
+                <h3 class="text-lg font-bold text-white mb-4">Your Features</h3>
+                <div id="features-list">
+                    <div class="flex items-center gap-3 p-3 rounded-xl" style="background: #0f0f0f;">
+                        <i class="fa-solid fa-lock text-sm" style="color: #333;"></i>
+                        <span class="text-sm" style="color: #555;">Purchase a plan to unlock features</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECTION 1: PURCHASE -->
+        <div id="section-1" class="section">
+            <div class="text-center mb-8">
+                <h2 class="text-2xl font-bold text-white mb-2">Choose Your Plan</h2>
+                <p class="text-sm" style="color: #555;">Monthly subscription. Upgrade or downgrade anytime.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-4xl mx-auto">
+                <!-- V1 -->
+                <div class="tier-card" id="tier-v1">
+                    <span class="tier-badge tier-badge-gray">Starter</span>
+                    <h3 class="text-xl font-bold text-white mb-1">V1</h3>
+                    <div class="flex items-baseline gap-1 mb-4">
+                        <span class="text-4xl font-bold text-white">$1</span>
+                        <span class="text-sm" style="color: #555;">/month</span>
+                    </div>
+                    <div style="height: 1px; background: #222; margin: 16px 0;"></div>
+                    <ul class="space-y-3 mb-6">
+                        <li class="flex items-center gap-2 text-sm" style="color: #aaa;"><i class="fa-solid fa-check feature-check text-xs"></i> 1 Discord Account</li>
+                        <li class="flex items-center gap-2 text-sm" style="color: #aaa;"><i class="fa-solid fa-check feature-check text-xs"></i> Multi-channel posting</li>
+                        <li class="flex items-center gap-2 text-sm" style="color: #aaa;"><i class="fa-solid fa-check feature-check text-xs"></i> Custom delay settings</li>
+                        <li class="flex items-center gap-2 text-sm" style="color: #555;"><i class="fa-solid fa-xmark feature-x text-xs"></i> Image upload</li>
+                        <li class="flex items-center gap-2 text-sm" style="color: #555;"><i class="fa-solid fa-xmark feature-x text-xs"></i> Auto-reply</li>
+                    </ul>
+                    <button id="buy-v1" onclick="purchaseTier('v1')" class="w-full btn-accent py-4 rounded-2xl text-sm" style="border: none;">
+                        <i class="fa-solid fa-bolt mr-2"></i>Get Instant Access
+                    </button>
+                </div>
+
+                <!-- V2 -->
+                <div class="tier-card featured" id="tier-v2">
+                    <span class="tier-badge tier-badge-white">Popular</span>
+                    <h3 class="text-xl font-bold text-white mb-1">V2</h3>
+                    <div class="flex items-baseline gap-1 mb-4">
+                        <span class="text-4xl font-bold text-white">$1.50</span>
+                        <span class="text-sm" style="color: #555;">/month</span>
+                    </div>
+                    <div style="height: 1px; background: #222; margin: 16px 0;"></div>
+                    <ul class="space-y-3 mb-6">
+                        <li class="flex items-center gap-2 text-sm" style="color: #aaa;"><i class="fa-solid fa-check feature-check text-xs"></i> 3 Discord Accounts</li>
+                        <li class="flex items-center gap-2 text-sm" style="color: #aaa;"><i class="fa-solid fa-check feature-check text-xs"></i> Multi-channel posting</li>
+                        <li class="flex items-center gap-2 text-sm" style="color: #aaa;"><i class="fa-solid fa-check feature-check text-xs"></i> Custom delay settings</li>
+                        <li class="flex items-center gap-2 text-sm" style="color: #aaa;"><i class="fa-solid fa-check feature-check text-xs"></i> Image upload</li>
+                        <li class="flex items-center gap-2 text-sm" style="color: #aaa;"><i class="fa-solid fa-check feature-check text-xs"></i> Auto-reply DM</li>
+                    </ul>
+                    <button id="buy-v2" onclick="purchaseTier('v2')" class="w-full btn-accent py-4 rounded-2xl text-sm" style="border: none;">
+                        <i class="fa-solid fa-bolt mr-2"></i>Get Instant Access
+                    </button>
+                </div>
+
+                <!-- V3 -->
+                <div class="tier-card" id="tier-v3">
+                    <span class="tier-badge tier-badge-gray">Pro</span>
+                    <h3 class="text-xl font-bold text-white mb-1">V3</h3>
+                    <div class="flex items-baseline gap-1 mb-4">
+                        <span class="text-4xl font-bold text-white">$2.50</span>
+                        <span class="text-sm" style="color: #555;">/month</span>
+                    </div>
+                    <div style="height: 1px; background: #222; margin: 16px 0;"></div>
+                    <ul class="space-y-3 mb-6">
+                        <li class="flex items-center gap-2 text-sm" style="color: #aaa;"><i class="fa-solid fa-check feature-check text-xs"></i> 5 Discord Accounts</li>
+                        <li class="flex items-center gap-2 text-sm" style="color: #aaa;"><i class="fa-solid fa-check feature-check text-xs"></i> Multi-channel posting</li>
+                        <li class="flex items-center gap-2 text-sm" style="color: #aaa;"><i class="fa-solid fa-check feature-check text-xs"></i> Custom delay settings</li>
+                        <li class="flex items-center gap-2 text-sm" style="color: #aaa;"><i class="fa-solid fa-check feature-check text-xs"></i> Image upload</li>
+                        <li class="flex items-center gap-2 text-sm" style="color: #aaa;"><i class="fa-solid fa-check feature-check text-xs"></i> Auto-reply DM</li>
+                    </ul>
+                    <button id="buy-v3" onclick="purchaseTier('v3')" class="w-full btn-accent py-4 rounded-2xl text-sm" style="border: none;">
+                        <i class="fa-solid fa-bolt mr-2"></i>Get Instant Access
+                    </button>
+                </div>
+            </div>
+
+            <div class="card rounded-3xl p-5 max-w-4xl mx-auto mt-6 text-center">
+                <p class="text-sm" style="color: #666;">
+                    <i class="fa-solid fa-circle-info mr-1" style="color: #555;"></i>
+                    Need more accounts? Add extra configs for <strong class="text-white">$0.50/month</strong> each.
+                </p>
+            </div>
+        </div>
+
+        <!-- SECTION 2: CONFIGURE -->
+        <div id="section-2" class="section">
+            <div id="active-accounts" class="mb-6 hidden">
+                <h3 class="text-lg font-bold mb-4 text-white"><i class="fa-solid fa-server mr-2" style="color: #888;"></i>Running Accounts</h3>
+                <div id="accounts-list"></div>
+            </div>
+
+            <div class="text-center mb-6">
+                <button id="add-account-btn" class="btn-purple px-6 py-3 rounded-2xl font-bold" style="border: none;">
+                    <i class="fa-solid fa-plus mr-2"></i>Add Another Account
+                </button>
+            </div>
+
+            <div id="config-form" class="card rounded-3xl p-7 max-w-lg mx-auto">
+                <div class="flex justify-between items-center mb-8">
+                    <h2 class="text-2xl font-bold" id="form-title" style="color: #fff;">Configure Bot</h2>
+                    <span id="account-badge" class="text-xs px-3 py-1 rounded-full hidden" style="background: #222; color: #fff;">Account #<span id="account-num">1</span></span>
+                </div>
+                
+                <div class="space-y-6">
+                    <div>
+                        <label class="form-label">Discord Token</label>
+                        <input id="token" type="password" placeholder="Paste token" class="w-full rounded-2xl px-5 py-4 text-sm" style="color: #fff;">
+                    </div>
+                    
+                    <div id="image-section">
+                        <label class="form-label">Advertisement Image (Optional) <span id="img-lock" class="hidden" style="color: #555; font-size: 11px;">(V2+ required)</span></label>
+                        <div class="upload-area" id="upload-area">
+                            <input type="file" id="image-input" accept="image/*" class="hidden">
+                            <div id="upload-placeholder">
+                                <i class="fa-solid fa-image text-3xl mb-2" style="color: #444;"></i>
+                                <p class="text-sm" style="color: #666;">Click to upload image</p>
+                                <p class="text-xs mt-1" style="color: #444;">PNG, JPG, GIF up to 5MB</p>
+                            </div>
+                            <img id="image-preview" class="image-preview hidden mx-auto" onclick="document.getElementById('image-input').click()" />
+                        </div>
+                        <button id="clear-image-btn" class="hidden mt-2 text-xs" style="color: #ff6b6b; background: none; border: none; cursor: pointer;">
+                            <i class="fa-solid fa-trash mr-1"></i>Remove image
+                        </button>
+                    </div>
+                    
+                    <div>
+                        <label class="form-label">Channel IDs (comma separated)</label>
+                        <input id="channels" type="text" placeholder="123456789012345678, 987654321098765432" class="w-full rounded-2xl px-5 py-4 text-sm" style="color: #fff;">
+                        <p class="text-xs mt-1" style="color: #444;">Right-click channel in Discord → Copy Channel ID (numbers only)</p>
+                        <p class="text-xs mt-1" style="color: #ff6b6b; display: none;" id="channel-error">Channel IDs must be numbers only</p>
+                    </div>
+                    
+                    <div class="flex items-center justify-between p-4 rounded-2xl border mb-4" style="background: #0f0f0f; border-color: #222;">
+                        <div>
+                            <label class="text-sm font-medium block" style="color: #fff;"><i class="fa-solid fa-bolt mr-2" style="color: #888;"></i>Send All At Once</label>
+                            <p class="text-xs" style="color: #555;">Send to all channels simultaneously</p>
+                        </div>
+                        <label class="toggle-wrapper" for="send-all-at-once-toggle">
+                            <input type="checkbox" id="send-all-at-once-toggle" class="toggle-input" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    
+                    <div>
+                        <label class="form-label" id="delay-label">Delay (seconds)</label>
+                        <input id="delay" type="number" value="30" min="10" max="3600" class="w-full rounded-2xl px-5 py-4 text-sm" style="color: #fff;">
+                    </div>
+                    
+                    <div>
+                        <label class="form-label">Advertisement Message</label>
+                        <textarea id="message" rows="3" placeholder="Your ad message..." class="w-full rounded-3xl px-5 py-4 text-sm" style="color: #fff; resize: vertical;"></textarea>
+                    </div>
+                    
+                    <div id="auto-reply-section" class="flex items-center justify-between p-4 rounded-2xl border" style="background: #0f0f0f; border-color: #222;">
+                        <div>
+                            <label class="text-sm font-medium block" id="auto-reply-label" style="color: #fff;">Auto-Reply</label>
+                            <p class="text-xs" id="auto-reply-desc" style="color: #555;">Reply when someone asks about price/cost/buy</p>
+                        </div>
+                        <label class="toggle-wrapper" for="auto-reply-toggle">
+                            <input type="checkbox" id="auto-reply-toggle" class="toggle-input">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    
+                    <div id="auto-reply-container" class="hidden">
+                        <label class="form-label">Auto-Reply Message</label>
+                        <input id="auto-reply-text" type="text" placeholder="DM me for prices!" class="w-full rounded-2xl px-5 py-4 text-sm" style="color: #fff;">
+                    </div>
+                    
+                    <div class="flex gap-4">
+                        <button id="start-btn" class="flex-1 btn-accent py-4 rounded-2xl" style="border: none;">Start & Save</button>
+                        <button id="stop-btn" class="flex-1 py-4 rounded-2xl text-white font-bold" style="background: #1a1a1a; border: 1px solid #333; cursor: pointer;">Stop</button>
+                    </div>
+                    <div id="bot-status" class="text-center text-sm" style="color: #555;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECTION 3: PURCHASE LOGS -->
+        <div id="section-3" class="section">
+            <div class="max-w-2xl mx-auto">
+                <h2 class="text-2xl font-bold mb-6 text-white"><i class="fa-solid fa-clock-rotate-left mr-2" style="color: #888;"></i>Subscription & Keys</h2>
+                
+                <!-- Current Subscription -->
+                <div class="card rounded-3xl p-6 mb-6">
+                    <h3 class="text-lg font-bold mb-4 text-white">Current Subscription</h3>
+                    <div id="logs-no-sub" class="text-center py-6">
+                        <i class="fa-solid fa-crown text-3xl mb-3" style="color: #333;"></i>
+                        <p style="color: #555;">No active subscription</p>
+                        <button onclick="switchTab(1)" class="btn-accent px-6 py-2.5 rounded-2xl text-sm mt-4" style="border: none;">View Plans</button>
+                    </div>
+                    <div id="logs-sub-info" class="hidden">
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <p class="text-2xl font-bold text-white" id="logs-tier-name">V2</p>
+                                <p class="text-sm mt-1" style="color: #666;" id="logs-tier-price">$1.50/month</p>
+                            </div>
+                            <span class="status-badge" style="background: #1a2a1a; color: #7ee787;"><i class="fa-solid fa-circle text-[8px] mr-1"></i>Active</span>
+                        </div>
+                        <div style="height: 1px; background: #222; margin: 16px 0;"></div>
+                        <div class="flex justify-between text-sm mb-2">
+                            <span style="color: #555;">Started</span>
+                            <span style="color: #aaa;" id="logs-start-date">-</span>
+                        </div>
+                        <div class="flex justify-between text-sm mb-4">
+                            <span style="color: #555;">Next renewal</span>
+                            <span style="color: #aaa;" id="logs-renewal-date">-</span>
+                        </div>
+                        <div class="flex gap-3">
+                            <button onclick="renewSubscription()" class="flex-1 btn-accent py-3 rounded-2xl text-sm" style="border: none;"><i class="fa-solid fa-rotate mr-2"></i>Renew Now</button>
+                            <button onclick="cancelSubscription()" class="py-3 px-4 rounded-2xl text-sm font-bold" style="background: #1a1a1a; border: 1px solid #442222; color: #ff6b6b; cursor: pointer;"><i class="fa-solid fa-ban mr-2"></i>Cancel</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Extra Configs -->
+                <div class="card rounded-3xl p-6 mb-6">
+                    <h3 class="text-lg font-bold mb-4 text-white">Extra Configs</h3>
+                    <div id="logs-extra-list">
+                        <p class="text-sm text-center py-4" style="color: #555;">No extra configs added</p>
+                    </div>
+                </div>
+                
+                <!-- Redeem Key -->
+                <div class="redeem-section card max-w-md mx-auto mb-6">
+                    <h3 class="text-lg font-bold mb-3 text-white"><i class="fa-solid fa-key mr-2" style="color: #888;"></i>Redeem Access Key</h3>
+                    <div class="flex gap-2">
+                        <input id="redeem-key" type="text" placeholder="Enter key" class="flex-1 rounded-2xl px-4 py-3 text-sm uppercase" style="color: #fff;">
+                        <button id="redeem-btn" class="btn-purple px-6 py-3 rounded-2xl text-sm font-bold" style="border: none;">Redeem</button>
+                    </div>
+                    <p class="text-xs mt-2" style="color: #444;">Enter a key given to you by an admin to unlock access.</p>
+                    <div id="redeem-result" class="mt-3"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECTION 4: GENERATE KEYS -->
+        <div id="section-4" class="section">
+            <div class="max-w-3xl mx-auto">
+                <h2 class="text-2xl font-bold mb-6 text-white"><i class="fa-solid fa-key mr-2" style="color: #888;"></i>Generate Keys</h2>
+                
+                <div class="generate-section card mb-6">
+                    <h3 class="text-lg font-bold mb-4 text-white"><i class="fa-solid fa-plus mr-2"></i>Create New Key</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                        <select id="key-tier" class="bg-zinc-900 border border-zinc-700 rounded-2xl px-4 py-3 text-sm" style="color: #fff; background: #0f0f0f;">
+                            <option value="v1">V1 — $1/month</option>
+                            <option value="v2">V2 — $1.50/month</option>
+                            <option value="v3">V3 — $2.50/month</option>
+                            <option value="extra">Extra Config — $0.50/month</option>
+                        </select>
+                        <select id="key-duration" class="bg-zinc-900 border border-zinc-700 rounded-2xl px-4 py-3 text-sm" style="color: #fff; background: #0f0f0f;">
+                            <option value="1">1 Month</option>
+                            <option value="3">3 Months</option>
+                            <option value="6">6 Months</option>
+                            <option value="12">12 Months</option>
+                        </select>
+                    </div>
+                    <button onclick="generateKey()" class="btn-orange px-6 py-3 rounded-2xl text-sm font-bold" style="border: none;">
+                        <i class="fa-solid fa-wand-magic-sparkles mr-2"></i>Generate
+                    </button>
+                    <div id="generate-result" class="mt-3"></div>
+                </div>
+
+                <div class="card rounded-3xl p-6">
+                    <h3 class="text-lg font-bold mb-4 text-white"><i class="fa-solid fa-list mr-2"></i>Generated Keys</h3>
+                    <div id="keys-list">
+                        <div class="text-center p-4">
+                            <i class="fa-solid fa-spinner fa-spin text-2xl mb-2" style="color: #888;"></i>
+                            <p style="color: #666;">Loading keys...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECTION 5: WHITELIST -->
+        <div id="section-5" class="section">
+            <div class="max-w-2xl mx-auto">
+                <h2 class="text-2xl font-bold mb-6 text-white"><i class="fa-solid fa-shield-halved mr-2" style="color: #888;"></i>Whitelist Management</h2>
+                
+                <div class="whitelist-section card mb-6">
+                    <h3 class="text-lg font-bold mb-4 text-white"><i class="fa-solid fa-user-plus mr-2"></i>Add to Whitelist</h3>
+                    <div class="flex gap-3">
+                        <input id="whitelist-id" type="text" placeholder="Discord User ID" class="flex-1 rounded-2xl px-4 py-3 text-sm" style="color: #fff;">
+                        <button onclick="addToWhitelist()" class="btn-blue px-6 py-3 rounded-2xl text-sm font-bold" style="border: none;">
+                            <i class="fa-solid fa-plus mr-2"></i>Add
+                        </button>
+                    </div>
+                    <div id="whitelist-result" class="mt-3"></div>
+                </div>
+
+                <div class="card rounded-3xl p-6">
+                    <h3 class="text-lg font-bold mb-4 text-white"><i class="fa-solid fa-users mr-2"></i>Whitelisted Users</h3>
+                    <div id="whitelist-list">
+                        <div class="text-center p-4">
+                            <i class="fa-solid fa-spinner fa-spin text-2xl mb-2" style="color: #888;"></i>
+                            <p style="color: #666;">Loading whitelist...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==================== CONFIG ====================
+        const TIER_CONFIG = {
+            v1: { name: 'V1', price: 1.0, accounts: 1, image: false, autoReply: false },
+            v2: { name: 'V2', price: 1.5, accounts: 3, image: true, autoReply: true },
+            v3: { name: 'V3', price: 2.5, accounts: 5, image: true, autoReply: true }
+        };
+        const EXTRA_PRICE = 0.5;
+        const ADMIN_IDS = ['883976984420556820', '1482735601622192208'];
+        const STORAGE_KEY = 'veiled_demo_v2';
+
+        // ==================== STATE ====================
+        let isPurchased = false;
+        let currentTier = null;
+        let currentConfigId = 'default';
+        let savedConfigs = [];
+        let selectedImageBase64 = null;
+        let activityInterval = null;
+        let isAdmin = false;
+        let currentUserId = null;
+        let currentUserName = null;
+
+        // ==================== STORAGE ====================
+        function getStorage() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                return raw ? JSON.parse(raw) : { users: {}, keys: [], whitelist: [] };
+            } catch(e) { return { users: {}, keys: [], whitelist: [] }; }
+        }
+        function saveStorage(data) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        }
+        function getUserData(userId) {
+            const store = getStorage();
+            if (!store.users[userId]) {
+                store.users[userId] = { tier: null, subscribedAt: null, expiresAt: null, configs: [], extraConfigs: 0, redeemedKeys: [] };
+                saveStorage(store);
+            }
+            return store.users[userId];
+        }
+        function updateUserData(userId, updates) {
+            const store = getStorage();
+            store.users[userId] = { ...store.users[userId], ...updates };
+            saveStorage(store);
+        }
+
+        // ==================== LOGIN ====================
+        function doLogin() {
+            const id = document.getElementById('login-id').value.trim();
+            if (!id || !/^\d{10,20}$/.test(id)) {
+                alert('Enter a valid numeric Discord User ID');
+                return;
+            }
+            currentUserId = id;
+            currentUserName = 'User ' + id.slice(-4);
+            isAdmin = ADMIN_IDS.includes(id);
+            sessionStorage.setItem('veiled_session', JSON.stringify({ id, name: currentUserName, isAdmin }));
+            enterApp();
+        }
+        function checkSession() {
+            const sess = sessionStorage.getItem('veiled_session');
+            if (sess) {
+                const data = JSON.parse(sess);
+                currentUserId = data.id;
+                currentUserName = data.name;
+                isAdmin = data.isAdmin;
+                enterApp();
+            }
+        }
+        function enterApp() {
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('main-app').classList.remove('hidden');
+            const ud = getUserData(currentUserId);
+            // Show nav items based on state
+            if (ud.tier) {
+                isPurchased = true;
+                currentTier = ud.tier;
+                document.getElementById('nav-2').classList.remove('hidden');
+                document.getElementById('nav-3').classList.remove('hidden');
+            }
+            if (isAdmin) {
+                document.getElementById('nav-4').classList.remove('hidden');
+                document.getElementById('nav-5').classList.remove('hidden');
+            }
+            updateUserDisplay();
+            updateMainTab();
+            initializeEventListeners();
+        }
+        function updateUserDisplay() {
+            const initials = currentUserName.slice(0, 2).toUpperCase();
+            const tag = isAdmin ? '<span class="text-xs px-2 py-0.5 rounded-full ml-2" style="background: #fff; color: #0a0a0a; font-weight: 700;">Admin</span>' : '';
+            document.getElementById('user-display').innerHTML = `
+                <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold" style="background: #222; color: #aaa;">${initials}</div>
+                <span class="text-xs px-3 py-1 rounded-full hidden sm:inline" style="background: #1a1a1a; color: #888;">${currentUserName}${tag}</span>
+            `;
+        }
+
+        // ==================== EVENT LISTENERS ====================
+        function initializeEventListeners() {
+            document.querySelectorAll('.nav-link').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const tabIndex = parseInt(this.getAttribute('data-tab'));
+                    switchTab(tabIndex);
+                });
+            });
+            document.getElementById('redeem-btn').addEventListener('click', function(e) { e.preventDefault(); redeemKey(); });
+            document.getElementById('add-account-btn').addEventListener('click', function(e) { e.preventDefault(); showNewAccountForm(); });
+            document.getElementById('upload-area').addEventListener('click', function(e) { if (e.target.id !== 'image-preview') document.getElementById('image-input').click(); });
+            document.getElementById('image-input').addEventListener('change', handleImageSelect);
+            document.getElementById('clear-image-btn').addEventListener('click', function(e) { e.preventDefault(); e.stopPropagation(); clearImage(); });
+            document.getElementById('auto-reply-toggle').addEventListener('change', function() {
+                document.getElementById('auto-reply-container').classList.toggle('hidden', !this.checked);
+            });
+            document.getElementById('send-all-at-once-toggle').addEventListener('change', function() {});
+            document.getElementById('start-btn').addEventListener('click', function(e) { e.preventDefault(); startBot(); });
+            document.getElementById('stop-btn').addEventListener('click', function(e) { e.preventDefault(); stopBot(); });
+
+            const navScroll = document.getElementById('nav-scroll');
+            let isDown = false, startX, scrollLeft;
+            navScroll.addEventListener('mousedown', (e) => { isDown = true; startX = e.pageX - navScroll.offsetLeft; scrollLeft = navScroll.scrollLeft; });
+            navScroll.addEventListener('mouseleave', () => isDown = false);
+            navScroll.addEventListener('mouseup', () => isDown = false);
+            navScroll.addEventListener('mousemove', (e) => { if (!isDown) return; e.preventDefault(); navScroll.scrollLeft = scrollLeft - (e.pageX - navScroll.offsetLeft - startX) * 2; });
+        }
+
+        // ==================== TAB SWITCHING ====================
+        function switchTab(n) {
+            const ud = getUserData(currentUserId);
+            if (n === 2 && !ud.tier) { alert('Purchase or claim a plan first!'); return; }
+            if (n === 4 && !isAdmin) { alert('Admin only!'); return; }
+            if (n === 5 && !isAdmin) { alert('Admin only!'); return; }
+            
+            if (activityInterval) { clearInterval(activityInterval); activityInterval = null; }
+            
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.getElementById('section-' + n).classList.add('active');
+            
+            document.querySelectorAll('.nav-link').forEach(l => { l.classList.remove('active'); });
+            const activeNav = document.getElementById('nav-' + n);
+            if (activeNav) {
+                activeNav.classList.add('active');
+                activeNav.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+            }
+            
+            if (n === 2) { loadSavedConfigs(); updateConfigLimits(); }
+            if (n === 3) { renderPurchaseLogs(); }
+            if (n === 4) { loadGeneratedKeys(); }
+            if (n === 5) { loadWhitelist(); }
+        }
+
+        // ==================== MAIN TAB UPDATE ====================
+        function updateMainTab() {
+            const ud = getUserData(currentUserId);
+            const tier = ud.tier ? TIER_CONFIG[ud.tier] : null;
+            const totalLimit = tier ? tier.accounts + ud.extraConfigs : 0;
+            const used = ud.configs.length;
+
+            document.getElementById('credits-display').textContent = tier ? tier.name : 'Free';
+            document.getElementById('credits-sub').classList.toggle('hidden', !tier);
+            document.getElementById('accounts-display').textContent = `${used} / ${totalLimit}`;
+            const pct = totalLimit > 0 ? Math.round((used / totalLimit) * 100) : 0;
+            document.getElementById('accounts-bar').style.width = pct + '%';
+
+            if (tier) {
+                document.getElementById('status-text').textContent = 'Active';
+                document.getElementById('status-text').style.color = '#7ee787';
+                document.getElementById('status-box').innerHTML = `<p class="text-xl font-medium" style="color: #7ee787;">${tier.name} Active</p><button onclick="switchTab(2)" class="mt-4 w-full btn-accent py-3 rounded-2xl text-sm" style="border: none;">Configure</button>`;
+            } else {
+                document.getElementById('status-text').textContent = 'Not Subscribed';
+                document.getElementById('status-text').style.color = '#888';
+                document.getElementById('status-box').innerHTML = `<p class="text-xl font-medium" style="color: #888;">Not Subscribed</p><button onclick="switchTab(1)" class="mt-5 w-full btn-accent py-3.5 rounded-2xl text-base" style="border: none;">View Plans</button>`;
+            }
+
+            // Features list
+            const featList = document.getElementById('features-list');
+            if (!tier) {
+                featList.innerHTML = `<div class="flex items-center gap-3 p-3 rounded-xl" style="background: #0f0f0f;"><i class="fa-solid fa-lock text-sm" style="color: #333;"></i><span class="text-sm" style="color: #555;">Purchase a plan to unlock features</span></div>`;
+            } else {
+                featList.innerHTML = `
+                    <div class="flex items-center gap-3 p-3 rounded-xl mb-2" style="background: #0f0f0f;"><i class="fa-solid fa-check feature-check text-xs"></i><span class="text-sm" style="color: #aaa;">${tier.accounts} Discord account${tier.accounts > 1 ? 's' : ''}</span></div>
+                    <div class="flex items-center gap-3 p-3 rounded-xl mb-2" style="background: #0f0f0f;"><i class="fa-solid fa-check feature-check text-xs"></i><span class="text-sm" style="color: #aaa;">Multi-channel posting</span></div>
+                    <div class="flex items-center gap-3 p-3 rounded-xl mb-2" style="background: #0f0f0f;"><i class="fa-solid fa-${tier.image ? 'check feature-check' : 'xmark feature-x'} text-xs"></i><span class="text-sm" style="color: ${tier.image ? '#aaa' : '#555'};">Image upload</span></div>
+                    <div class="flex items-center gap-3 p-3 rounded-xl" style="background: #0f0f0f;"><i class="fa-solid fa-${tier.autoReply ? 'check feature-check' : 'xmark feature-x'} text-xs"></i><span class="text-sm" style="color: ${tier.autoReply ? '#aaa' : '#555'};">Auto-reply DM</span></div>
+                    ${ud.extraConfigs > 0 ? `<div class="flex items-center gap-3 p-3 rounded-xl mt-2" style="background: #0f0f0f;"><i class="fa-solid fa-plus text-xs" style="color: #888;"></i><span class="text-sm" style="color: #aaa;">${ud.extraConfigs} extra config${ud.extraConfigs > 1 ? 's' : ''} ($${(ud.extraConfigs * EXTRA_PRICE).toFixed(2)}/mo)</span></div>` : ''}
+                `;
+            }
+
+            // Update purchase page buttons
+            ['v1','v2','v3'].forEach(tk => {
+                const btn = document.getElementById('buy-' + tk);
+                if (!btn) return;
+                if (ud.tier === tk) {
+                    btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>Current Plan';
+                    btn.disabled = true;
+                    btn.style.background = '#1a1a1a';
+                    btn.style.color = '#7ee787';
+                    btn.style.border = '1px solid #2a3a2a';
+                    document.getElementById('tier-' + tk).style.borderColor = '#444';
+                } else {
+                    btn.innerHTML = '<i class="fa-solid fa-bolt mr-2"></i>Get Instant Access';
+                    btn.disabled = false;
+                    btn.style.background = '';
+                    btn.style.color = '';
+                    btn.style.border = '';
+                    document.getElementById('tier-' + tk).style.borderColor = '';
+                }
+            });
+            if (ud.tier === 'v2') document.getElementById('tier-v2').style.borderColor = '#444';
+        }
+
+        // ==================== PURCHASE / TIER ====================
+        function purchaseTier(tierKey) {
+            const now = Date.now();
+            const monthMs = 30 * 24 * 60 * 60 * 1000;
+            updateUserData(currentUserId, { tier: tierKey, subscribedAt: now, expiresAt: now + monthMs });
+            isPurchased = true;
+            currentTier = tierKey;
+            document.getElementById('nav-2').classList.remove('hidden');
+            document.getElementById('nav-3').classList.remove('hidden');
+            updateMainTab();
+            switchTab(2);
+        }
+        function renewSubscription() {
+            const ud = getUserData(currentUserId);
+            if (!ud.tier) return;
+            const monthMs = 30 * 24 * 60 * 60 * 1000;
+            const newExp = (ud.expiresAt && ud.expiresAt > Date.now()) ? ud.expiresAt + monthMs : Date.now() + monthMs;
+            updateUserData(currentUserId, { expiresAt: newExp });
+            renderPurchaseLogs();
+            updateMainTab();
+        }
+        function cancelSubscription() {
+            if (!confirm('Cancel your subscription? You will keep access until the end of the current period.')) return;
+            updateUserData(currentUserId, { tier: null, expiresAt: null, subscribedAt: null, extraConfigs: 0 });
+            isPurchased = false;
+            currentTier = null;
+            document.getElementById('nav-2').classList.add('hidden');
+            document.getElementById('nav-3').classList.add('hidden');
+            updateMainTab();
+            switchTab(0);
+        }
+        function buyExtraConfig() {
+            const ud = getUserData(currentUserId);
+            updateUserData(currentUserId, { extraConfigs: ud.extraConfigs + 1 });
+            closeExtraModal();
+            updateMainTab();
+            showNewAccountForm();
+        }
+
+        // ==================== CONFIGURE ====================
+        function updateConfigLimits() {
+            const ud = getUserData(currentUserId);
+            const tier = ud.tier ? TIER_CONFIG[ud.tier] : null;
+            if (!tier) return;
+            const totalLimit = tier.accounts + ud.extraConfigs;
+            const used = ud.configs.length;
+
+            // Image gating
+            const imgSec = document.getElementById('image-section');
+            const imgLock = document.getElementById('img-lock');
+            if (!tier.image) {
+                imgSec.style.opacity = '0.4'; imgSec.style.pointerEvents = 'none'; imgLock.classList.remove('hidden');
+            } else {
+                imgSec.style.opacity = '1'; imgSec.style.pointerEvents = 'auto'; imgLock.classList.add('hidden');
+            }
+            // Auto-reply gating
+            const arSec = document.getElementById('auto-reply-section');
+            const arLabel = document.getElementById('auto-reply-label');
+            if (!tier.autoReply) {
+                arSec.style.opacity = '0.4'; arSec.querySelector('.toggle-wrapper').style.pointerEvents = 'none';
+                arLabel.innerHTML = 'Auto-Reply <span style="color:#555;font-size:11px;">(V2+ required)</span>';
+                document.getElementById('auto-reply-toggle').checked = false;
+                document.getElementById('auto-reply-container').classList.add('hidden');
+            } else {
+                arSec.style.opacity = '1'; arSec.querySelector('.toggle-wrapper').style.pointerEvents = 'auto';
+                arLabel.innerHTML = 'Auto-Reply';
+            }
+        }
+        function showNewAccountForm() {
+            const ud = getUserData(currentUserId);
+            const tier = ud.tier ? TIER_CONFIG[ud.tier] : null;
+            if (!tier) return;
+            const totalLimit = tier.accounts + ud.extraConfigs;
+            if (ud.configs.length >= totalLimit) {
+                document.getElementById('extra-tier').textContent = tier.name;
+                document.getElementById('extra-limit').textContent = tier.accounts;
+                document.getElementById('extra-modal').classList.add('active');
+                return;
+            }
+            currentConfigId = 'account_' + (savedConfigs.length + 1);
+            document.getElementById('form-title').textContent = 'Add New Account';
+            document.getElementById('account-badge').classList.remove('hidden');
+            document.getElementById('account-num').textContent = savedConfigs.length + 1;
+            document.getElementById('token').value = '';
+            document.getElementById('channels').value = '';
+            document.getElementById('message').value = '';
+            document.getElementById('delay').value = '30';
+            document.getElementById('auto-reply-toggle').checked = false;
+            document.getElementById('auto-reply-container').classList.add('hidden');
+            document.getElementById('auto-reply-text').value = '';
+            document.getElementById('bot-status').innerHTML = '';
+            document.getElementById('channel-error').style.display = 'none';
+            document.getElementById('send-all-at-once-toggle').checked = true;
+            clearImage();
+            document.getElementById('config-form').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // ==================== BOT / CONFIG ====================
+        async function loadSavedConfigs() {
+            const ud = getUserData(currentUserId);
+            savedConfigs = ud.configs || [];
+            renderAccountsList();
+        }
+        function renderAccountsList() {
+            const container = document.getElementById('active-accounts');
+            const list = document.getElementById('accounts-list');
+            if (savedConfigs.length === 0) { container.classList.add('hidden'); return; }
+            container.classList.remove('hidden');
+            list.innerHTML = '';
+            savedConfigs.forEach((config, index) => {
+                const isActive = config.active === true;
+                const card = document.createElement('div');
+                card.className = `account-card ${isActive ? 'account-active' : ''}`;
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                            <h4 class="font-bold text-white">${config.name || 'Account ' + (index+1)}</h4>
+                            <p class="text-xs mt-1" style="color: #555;">Channels: ${config.channels ? config.channels.split(',').length : 0}</p>
+                            ${config.image ? '<p class="text-xs mt-1" style="color: #888;"><i class="fa-solid fa-image mr-1"></i>Has image</p>' : ''}
+                        </div>
+                        <span class="status-badge ${isActive ? 'status-running' : 'status-stopped'}">${isActive ? 'Running' : 'Stopped'}</span>
+                    </div>
+                    <div class="flex gap-2 mt-3">
+                        <button onclick="editConfig(${index})" class="flex-1 py-2 rounded-lg text-xs" style="background: #222; color: #fff; border: none; cursor: pointer;">Edit</button>
+                        <button onclick="deleteConfig(${index})" class="flex-1 py-2 rounded-lg text-xs" style="background: #1a1111; color: #ff6b6b; border: 1px solid #442222; cursor: pointer;">Delete</button>
+                    </div>
+                `;
+                list.appendChild(card);
+            });
+        }
+        function editConfig(index) {
+            const config = savedConfigs[index];
+            if (!config) return;
+            currentConfigId = config.id || ('account_' + (index + 1));
+            document.getElementById('form-title').textContent = 'Edit Account';
+            document.getElementById('account-badge').classList.add('hidden');
+            document.getElementById('token').value = config.token || '';
+            document.getElementById('channels').value = config.channels || '';
+            document.getElementById('message').value = config.message || '';
+            document.getElementById('delay').value = config.delay_seconds || '30';
+            document.getElementById('auto-reply-toggle').checked = config.auto_reply_enabled === true;
+            document.getElementById('auto-reply-container').classList.toggle('hidden', config.auto_reply_enabled !== true);
+            document.getElementById('auto-reply-text').value = config.auto_reply_text || '';
+            document.getElementById('send-all-at-once-toggle').checked = config.send_all_at_once !== false;
+            document.getElementById('channel-error').style.display = 'none';
+            document.getElementById('bot-status').innerHTML = '';
+            if (config.image) {
+                selectedImageBase64 = config.image;
+                const preview = document.getElementById('image-preview');
+                preview.src = config.image;
+                preview.classList.remove('hidden');
+                preview.classList.add('has-image');
+                document.getElementById('upload-placeholder').classList.add('hidden');
+                document.getElementById('upload-area').classList.add('has-file');
+                document.getElementById('clear-image-btn').classList.remove('hidden');
+            } else { clearImage(); }
+            document.getElementById('config-form').scrollIntoView({ behavior: 'smooth' });
+        }
+        async function deleteConfig(index) {
+            if (!confirm('Delete this account configuration?')) return;
+            const ud = getUserData(currentUserId);
+            ud.configs.splice(index, 1);
+            updateUserData(currentUserId, { configs: ud.configs });
+            savedConfigs = ud.configs;
+            renderAccountsList();
+        }
+        function handleImageSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            if (file.size > 5 * 1024 * 1024) { alert('Image too large. Max 5MB.'); return; }
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                selectedImageBase64 = e.target.result;
+                const preview = document.getElementById('image-preview');
+                const placeholder = document.getElementById('upload-placeholder');
+                const uploadArea = document.getElementById('upload-area');
+                const clearBtn = document.getElementById('clear-image-btn');
+                preview.src = e.target.result;
+                preview.classList.remove('hidden');
+                preview.classList.add('has-image');
+                placeholder.classList.add('hidden');
+                uploadArea.classList.add('has-file');
+                clearBtn.classList.remove('hidden');
+            };
+            reader.readAsDataURL(file);
+        }
+        function clearImage() {
+            selectedImageBase64 = null;
+            document.getElementById('image-input').value = '';
+            document.getElementById('image-preview').classList.add('hidden');
+            document.getElementById('image-preview').classList.remove('has-image');
+            document.getElementById('upload-placeholder').classList.remove('hidden');
+            document.getElementById('upload-area').classList.remove('has-file');
+            document.getElementById('clear-image-btn').classList.add('hidden');
+        }
+
+        // ==================== START / STOP ====================
+        async function startBot() {
+            const token = document.getElementById('token').value.trim();
+            const channels = document.getElementById('channels').value.trim();
+            const message = document.getElementById('message').value.trim();
+            const delay = document.getElementById('delay').value;
+            const autoReplyEnabled = document.getElementById('auto-reply-toggle').checked;
+            const autoReplyText = document.getElementById('auto-reply-text').value.trim();
+            const sendAllAtOnce = document.getElementById('send-all-at-once-toggle').checked;
+            const status = document.getElementById('bot-status');
+            const btn = document.getElementById('start-btn');
+            const channelError = document.getElementById('channel-error');
+            const ud = getUserData(currentUserId);
+            const tier = TIER_CONFIG[ud.tier];
+
+            if (!token || !channels || !message) {
+                status.innerHTML = '<span style="color: #ff6b6b;">Fill all required fields</span>';
+                return;
+            }
+            const channelArray = channels.split(',').map(c => c.trim());
+            const invalidChannels = channelArray.filter(c => !/^\d+$/.test(c));
+            if (invalidChannels.length > 0) {
+                channelError.style.display = 'block';
+                status.innerHTML = '<span style="color: #ff6b6b;">Channel IDs must be numbers only</span>';
+                return;
+            } else { channelError.style.display = 'none'; }
+
+            if (autoReplyEnabled && !autoReplyText) {
+                status.innerHTML = '<span style="color: #ff6b6b;">Enter auto-reply text or disable it</span>';
+                return;
+            }
+            // Check tier limits for auto-reply and image
+            if (autoReplyEnabled && !tier.autoReply) {
+                status.innerHTML = '<span style="color: #ff6b6b;">Auto-reply requires V2+</span>';
+                return;
+            }
+            if (selectedImageBase64 && !tier.image) {
+                status.innerHTML = '<span style="color: #ff6b6b;">Image upload requires V2+</span>';
+                return;
+            }
+
+            btn.disabled = true;
+            status.innerHTML = '<span style="color: #888;">Validating...</span>';
+            await new Promise(r => setTimeout(r, 600));
+
+            // Save config
+            const existingIndex = savedConfigs.findIndex(c => c.id === currentConfigId);
+            const newConfig = {
+                id: currentConfigId,
+                token, channels, message, delay,
+                auto_reply_enabled: autoReplyEnabled,
+                auto_reply_text: autoReplyText,
+                send_all_at_once: sendAllAtOnce,
+                image: selectedImageBase64,
+                active: true,
+                name: 'Account ' + (existingIndex >= 0 ? existingIndex + 1 : savedConfigs.length + 1)
+            };
+
+            if (existingIndex >= 0) savedConfigs[existingIndex] = newConfig;
+            else savedConfigs.push(newConfig);
+
+            updateUserData(currentUserId, { configs: savedConfigs });
+
+            let msg = `Saved. ${newConfig.name} configured.`;
+            if (selectedImageBase64) msg += ' Image attached.';
+            status.innerHTML = `<span style="color: #7ee787;">${msg}</span>`;
+            renderAccountsList();
+
+            setTimeout(() => {
+                document.getElementById('form-title').textContent = 'Configure Bot';
+                document.getElementById('account-badge').classList.add('hidden');
+                currentConfigId = 'default';
+                btn.disabled = false;
+            }, 2000);
+        }
+        async function stopBot() {
+            const status = document.getElementById('bot-status');
+            const cfg = savedConfigs.find(c => c.id === currentConfigId);
+            if (cfg) { cfg.active = false; updateUserData(currentUserId, { configs: savedConfigs }); }
+            status.innerHTML = '<span style="color: #888;">Stopped & Saved</span>';
+            renderAccountsList();
+        }
+
+        // ==================== PURCHASE LOGS ====================
+        function renderPurchaseLogs() {
+            const ud = getUserData(currentUserId);
+            const tier = ud.tier ? TIER_CONFIG[ud.tier] : null;
+            document.getElementById('logs-no-sub').classList.toggle('hidden', !!tier);
+            document.getElementById('logs-sub-info').classList.toggle('hidden', !tier);
+            if (tier) {
+                document.getElementById('logs-tier-name').textContent = tier.name;
+                document.getElementById('logs-tier-price').textContent = '$' + tier.price.toFixed(2) + '/month';
+                document.getElementById('logs-start-date').textContent = ud.subscribedAt ? new Date(ud.subscribedAt).toLocaleDateString() : '-';
+                document.getElementById('logs-renewal-date').textContent = ud.expiresAt ? new Date(ud.expiresAt).toLocaleDateString() : '-';
+            }
+            // Extra configs
+            const extraList = document.getElementById('logs-extra-list');
+            if (ud.extraConfigs > 0) {
+                let html = '';
+                for (let i = 0; i < ud.extraConfigs; i++) {
+                    html += `<div class="flex justify-between items-center p-3 rounded-xl mb-2" style="background: #0f0f0f; border: 1px solid #1a1a1a;"><div class="flex items-center gap-2"><i class="fa-solid fa-plus text-xs" style="color: #555;"></i><span class="text-sm" style="color: #aaa;">Extra Config #${i+1}</span></div><span class="text-xs font-medium" style="color: #888;">$0.50/mo</span></div>`;
+                }
+                extraList.innerHTML = html;
+            } else {
+                extraList.innerHTML = '<p class="text-sm text-center py-4" style="color: #555;">No extra configs added</p>';
+            }
+        }
+
+        // ==================== REDEEM KEY ====================
+        async function redeemKey() {
+            const keyVal = document.getElementById('redeem-key').value.trim().toUpperCase();
+            const btn = document.getElementById('redeem-btn');
+            const result = document.getElementById('redeem-result');
+            if (!keyVal) { result.innerHTML = '<p class="error-text">Enter a key</p>'; return; }
+            btn.disabled = true;
+            const store = getStorage();
+            const key = store.keys.find(k => k.key === keyVal && k.active && !k.redeemedBy);
+            if (!key) {
+                result.innerHTML = '<p class="error-text">Invalid or already used key</p>';
+                btn.disabled = false; return;
+            }
+            key.redeemedBy = currentUserId;
+            key.redeemedAt = Date.now();
+            saveStorage(store);
+            const now = Date.now();
+            const monthMs = 30 * 24 * 60 * 60 * 1000;
+            updateUserData(currentUserId, { tier: key.tier, subscribedAt: now, expiresAt: now + (key.durationMonths * monthMs) });
+            result.innerHTML = '<p class="success-text"><i class="fa-solid fa-check mr-1"></i>Key redeemed! Access granted.</p>';
+            document.getElementById('redeem-key').value = '';
+            isPurchased = true;
+            currentTier = key.tier;
+            document.getElementById('nav-2').classList.remove('hidden');
+            document.getElementById('nav-3').classList.remove('hidden');
+            updateMainTab();
+            setTimeout(() => switchTab(2), 1000);
+            btn.disabled = false;
+        }
+
+        // ==================== ADMIN: GENERATE KEYS ====================
+        async function generateKey() {
+            const tier = document.getElementById('key-tier').value;
+            const duration = parseInt(document.getElementById('key-duration').value);
+            const result = document.getElementById('generate-result');
+            const keyStr = 'VL-' + Array.from({length: 16}, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)]).join('');
+            const store = getStorage();
+            store.keys.push({ key: keyStr, tier, durationMonths: duration, active: true, createdAt: Date.now(), createdBy: currentUserId, redeemedBy: null, redeemedAt: null });
+            saveStorage(store);
+            result.innerHTML = `<div class="p-4 rounded-xl" style="background: #0f0f0f; border: 1px solid #333;"><p class="text-xs mb-2" style="color: #7ee787;"><i class="fa-solid fa-check mr-1"></i>Key generated!</p><p class="font-mono text-lg font-bold text-white select-all">${keyStr}</p><p class="text-xs mt-2" style="color: #555;">${TIER_CONFIG[tier]?.name || tier} &bull; ${duration} month(s)</p></div>`;
+            loadGeneratedKeys();
+        }
+        async function loadGeneratedKeys() {
+            const store = getStorage();
+            const list = document.getElementById('keys-list');
+            if (store.keys.length === 0) { list.innerHTML = '<p class="text-center" style="color: #555;">No keys generated yet</p>'; return; }
+            let html = '';
+            store.keys.slice().reverse().forEach(key => {
+                let statusClass = 'key-active'; let statusText = 'Active'; let statusColor = '#7ee787';
+                if (!key.active) { statusClass = 'key-revoked'; statusText = 'Revoked'; statusColor = '#ff6b6b'; }
+                else if (key.redeemedBy) { statusClass = 'key-expired'; statusText = 'Used'; statusColor = '#666'; }
+                html += `
+                    <div class="key-card ${statusClass}">
+                        <div class="flex justify-between items-start mb-2">
+                            <div><p class="font-mono text-sm font-bold text-white">${key.key}</p><p class="text-xs mt-1" style="color: #555;">${TIER_CONFIG[key.tier]?.name || key.tier} &bull; ${key.durationMonths} mo${key.redeemedBy ? ' &bull; Used by ' + key.redeemedBy : ''}</p></div>
+                            <span class="text-xs px-3 py-1 rounded-full" style="background: ${statusColor}20; color: ${statusColor};">${statusText}</span>
+                        </div>
+                        ${key.active && !key.redeemedBy ? `<button onclick="revokeKey('${key.key}')" class="text-xs px-3 py-1 rounded mt-2" style="background: #1a1111; color: #ff6b6b; border: 1px solid #442222; cursor: pointer;"><i class="fa-solid fa-ban mr-1"></i>Revoke</button>` : ''}
+                    </div>`;
+            });
+            list.innerHTML = html;
+        }
+        async function revokeKey(keyStr) {
+            if (!confirm('Revoke this key?')) return;
+            const store = getStorage();
+            const k = store.keys.find(k => k.key === keyStr);
+            if (k) { k.active = false; saveStorage(store); }
+            loadGeneratedKeys();
+        }
+
+        // ==================== ADMIN: WHITELIST ====================
+        async function addToWhitelist() {
+            const userId = document.getElementById('whitelist-id').value.trim();
+            const result = document.getElementById('whitelist-result');
+            if (!userId) { result.innerHTML = '<p class="error-text">Enter a User ID</p>'; return; }
+            const store = getStorage();
+            if (!store.whitelist) store.whitelist = [];
+            if (!store.whitelist.includes(userId)) { store.whitelist.push(userId); saveStorage(store); }
+            document.getElementById('whitelist-id').value = '';
+            result.innerHTML = '<p class="success-text">User added to whitelist</p>';
+            loadWhitelist();
+        }
+        async function removeFromWhitelist(userId) {
+            if (!confirm('Remove this user from whitelist?')) return;
+            const store = getStorage();
+            store.whitelist = store.whitelist.filter(w => w !== userId);
+            saveStorage(store);
+            loadWhitelist();
+        }
+        async function loadWhitelist() {
+            const store = getStorage();
+            const list = document.getElementById('whitelist-list');
+            if (!store.whitelist || store.whitelist.length === 0) { list.innerHTML = '<p class="text-center" style="color: #555;">No users whitelisted</p>'; return; }
+            let html = '';
+            store.whitelist.forEach(userId => {
+                html += `<div class="flex justify-between items-center p-3 rounded-lg mb-2" style="background: #0f0f0f; border: 1px solid #1a1a1a;"><span class="font-mono text-sm text-white">${userId}</span><button onclick="removeFromWhitelist('${userId}')" class="text-xs px-3 py-1 rounded" style="background: #1a1111; color: #ff6b6b; border: 1px solid #442222; cursor: pointer;"><i class="fa-solid fa-trash mr-1"></i>Remove</button></div>`;
+            });
+            list.innerHTML = html;
+        }
+
+        // ==================== MODALS ====================
+        function initiateLogout() { document.getElementById('logout-modal').classList.add('active'); }
+        function closeLogoutModal() { document.getElementById('logout-modal').classList.remove('active'); }
+        function closeExtraModal() { document.getElementById('extra-modal').classList.remove('active'); }
+        async function confirmLogout() {
+            sessionStorage.removeItem('veiled_session');
+            location.reload();
+        }
+
+        // ==================== INIT ====================
+        document.addEventListener('DOMContentLoaded', function() {
+            checkSession();
+        });
+    </script>
+</body>
+</html>
