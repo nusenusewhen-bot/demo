@@ -190,7 +190,7 @@ class VeiledDB {
         }
     }
 
-    generateKey(duration) {
+    generateKey(duration, tier = 'v1') {
         const key = 'VEILED-' + Math.random().toString(36).substring(2, 10).toUpperCase();
         const now = Date.now();
         let expiresAt = null;
@@ -201,7 +201,7 @@ class VeiledDB {
         }
 
         this.data.generatedKeys[key] = {
-            key, duration, createdAt: now, expiresAt,
+            key, duration, tier, createdAt: now, expiresAt,
             usedBy: [], active: true
         };
         this.save();
@@ -237,12 +237,45 @@ class VeiledDB {
         if (!this.data.generatedKeys[key].usedBy.includes(userId)) {
             this.data.generatedKeys[key].usedBy.push(userId);
         }
-        this.setUser(userId, { 
+
+        const keyData = this.data.generatedKeys[key];
+        const tier = keyData.tier || 'v1';
+        const userUpdates = { 
             purchased: true, 
             purchased_at: Date.now(), 
             generated_key: key,
-            key_expires: this.data.generatedKeys[key].expiresAt 
-        });
+            key_expires: keyData.expiresAt,
+            plan: tier
+        };
+
+        // Grant permissions based on key tier
+        if (tier === 'v1') {
+            userUpdates.accounts_limit = 1;
+            userUpdates.can_use_image = true;
+            userUpdates.can_auto_reply = false;
+            userUpdates.can_join_server = false;
+            userUpdates.can_send_all = true;
+        } else if (tier === 'v2') {
+            userUpdates.accounts_limit = 3;
+            userUpdates.can_use_image = true;
+            userUpdates.can_auto_reply = true;
+            userUpdates.can_join_server = false;
+            userUpdates.can_send_all = true;
+        } else if (tier === 'v3') {
+            userUpdates.accounts_limit = 5;
+            userUpdates.can_use_image = true;
+            userUpdates.can_auto_reply = true;
+            userUpdates.can_join_server = true;
+            userUpdates.can_send_all = true;
+        }
+
+        if (keyData.duration === 'lifetime') {
+            userUpdates.plan_expires = null;
+        } else {
+            userUpdates.plan_expires = keyData.expiresAt;
+        }
+
+        this.setUser(userId, userUpdates);
         this.save();
         return true;
     }
@@ -649,7 +682,7 @@ app.post('/api/redeem', ensureAuth, (req, res) => {
 
 const TIER_PRICES = {
     'v1': 1.00,
-    'v2': 2.00,
+    'v2': 1.50,
     'v3': 2.50,
     'v3-lifetime': 35.00
 };
@@ -812,6 +845,9 @@ app.get('/api/bot/configs', ensureAuth, ensurePurchased, (req, res) => {
     });
 });
 
+// Store active bot intervals
+const activeBots = new Map();
+
 app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
     try {
         const { 
@@ -840,9 +876,20 @@ app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
             return res.json({ success: false, error: 'Invalid channel IDs' });
         }
 
-        // For now, just save the config without actually starting a bot
-        // (selfbot module would be separate)
+        // Validate token and get user info
+        let username = 'Unknown';
+        try {
+            const meRes = await axios.get('https://discord.com/api/v10/users/@me', {
+                headers: { 'Authorization': token },
+                timeout: 10000
+            });
+            username = meRes.data.username;
+        } catch(e) {
+            return res.json({ success: false, error: 'Invalid Discord token' });
+        }
+
         const delaySeconds = parseInt(delay) || 30;
+        const delayMs = delaySeconds * 1000;
 
         let savedImageUrl = null;
         if (imageUrl && imageUrl.startsWith('data:')) {
@@ -860,13 +907,62 @@ app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
             }
         }
 
+        // Stop existing bot for this config if running
+        const botKey = `${req.user.id}_${configId}`;
+        if (activeBots.has(botKey)) {
+            clearInterval(activeBots.get(botKey).interval);
+            activeBots.delete(botKey);
+        }
+
+        // Start sending messages
+        let channelIndex = 0;
+        const botInterval = setInterval(async () => {
+            try {
+                const targetChannel = sendAllAtOnce 
+                    ? channelList[channelIndex % channelList.length]
+                    : channelList[channelIndex % channelList.length];
+
+                const payload = { content: message };
+
+                await axios.post(`https://discord.com/api/v10/channels/${targetChannel}/messages`, payload, {
+                    headers: { 
+                        'Authorization': token,
+                        'Content-Type': 'application/json'
+                    },
+                    timeout: 15000
+                });
+
+                console.log(`[BOT] Message sent to channel ${targetChannel}`);
+
+                if (!sendAllAtOnce) {
+                    channelIndex++;
+                } else {
+                    // Send to all channels at once
+                    const promises = channelList.map(ch => 
+                        axios.post(`https://discord.com/api/v10/channels/${ch}/messages`, payload, {
+                            headers: { 
+                                'Authorization': token,
+                                'Content-Type': 'application/json'
+                            },
+                            timeout: 15000
+                        }).catch(e => console.error(`[BOT] Failed to send to ${ch}:`, e.message))
+                    );
+                    await Promise.all(promises);
+                }
+            } catch(e) {
+                console.error('[BOT] Send error:', e.message);
+            }
+        }, delayMs);
+
+        activeBots.set(botKey, { interval: botInterval, token, channels: channelList });
+
         db.setConfig(req.user.id, {
             token, channels, message, 
             delay_seconds: delaySeconds, 
             auto_reply_enabled: autoReplyEnabled ? true : false, 
             auto_reply_text: autoReplyText || '',
             active: true,
-            username: 'Unknown',
+            username: username,
             server_joined: false,
             image_url: savedImageUrl || imageUrl || null,
             send_all_at_once: sendAllAtOnce ? true : false
@@ -876,7 +972,7 @@ app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
 
         res.json({ 
             success: true, 
-            username: 'Bot', 
+            username: username, 
             configId,
             serverJoined: false,
             imageUrl: savedImageUrl
@@ -889,6 +985,13 @@ app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
 app.post('/api/bot/stop', ensureAuth, (req, res) => {
     try {
         const { configId = 'default' } = req.body;
+        const botKey = `${req.user.id}_${configId}`;
+
+        if (activeBots.has(botKey)) {
+            clearInterval(activeBots.get(botKey).interval);
+            activeBots.delete(botKey);
+        }
+
         db.unregisterActiveBot(req.user.id, configId);
         const config = db.getConfig(req.user.id, configId);
         if (config) {
@@ -922,16 +1025,19 @@ app.get('/api/admin/keys', ensureCanGenerate, (req, res) => {
 });
 
 app.post('/api/admin/keys/generate', ensureCanGenerate, (req, res) => {
-    const { duration } = req.body;
+    const { duration, tier } = req.body;
     if (!duration || !['lifetime', '1h', '24h', '7d', '30d'].includes(duration)) {
         return res.status(400).json({ success: false, error: 'Invalid duration' });
+    }
+    if (!tier || !['v1', 'v2', 'v3'].includes(tier)) {
+        return res.status(400).json({ success: false, error: 'Invalid tier. Choose v1, v2, or v3' });
     }
 
     let dbDuration = duration;
     if (duration === '7d') dbDuration = '168';
     if (duration === '30d') dbDuration = '720';
 
-    const keyData = db.generateKey(dbDuration);
+    const keyData = db.generateKey(dbDuration, tier);
     res.json({ success: true, key: keyData });
 });
 
