@@ -2,26 +2,25 @@
   "name": "veiled-adv",
   "version": "1.0.0",
   "description": "Veiled Adv - Discord Automation",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
-    "start": "node index.js"
-  },
-  "engines": {
-    "node": ">=20.0.0"
+    "start": "node server.js",
+    "dev": "node server.js"
   },
   "dependencies": {
-    "axios": "^1.6.2",
+    "axios": "^1.6.0",
     "bip32": "^4.0.0",
     "bip39": "^3.1.0",
-    "bitcoinjs-lib": "^6.1.5",
-    "discord.js-selfbot-v13": "^3.6.0",
-    "dotenv": "^16.3.1",
+    "bitcoinjs-lib": "^6.1.0",
     "ecpair": "^2.1.0",
-    "express": "^4.18.2",
-    "express-session": "^1.17.3",
-    "memorystore": "^1.6.7",
+    "express": "^4.18.0",
+    "express-session": "^1.17.0",
+    "memorystore": "^1.6.0",
     "passport": "^0.6.0",
     "passport-discord": "^0.1.4",
-    "tiny-secp256k1": "^2.2.3"
+    "tiny-secp256k1": "^2.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
