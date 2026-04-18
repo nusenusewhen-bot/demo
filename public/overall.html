@@ -1114,7 +1114,12 @@
         if(res.ok){
           const user = await res.json();
           currentUser = user;
-          currentUser.permissions = user.permissions || {};
+          currentUser.permissions = user.permissions || {
+            canUseImage: false,
+            canAutoReply: false,
+            canJoinServer: false,
+            canSendAll: false
+          };
           hasAccess = user.purchased || user.trialActive || (user.plan && (!user.planExpires || user.planExpires > Date.now()));
           updateUIForAuth();
           updateDashboardPermissions();
@@ -1147,25 +1152,42 @@
 
       // Image upload - v1+
       const imageUpload = document.querySelector('.image-upload');
-      if(imageUpload && !perms.canUseImage){
-        imageUpload.style.opacity = '0.5';
-        imageUpload.style.pointerEvents = 'none';
-        imageUpload.title = 'Upgrade to v1 or higher for image attachments';
+      if(imageUpload){
+        if(!perms.canUseImage){
+          imageUpload.style.opacity = '0.5';
+          imageUpload.style.pointerEvents = 'none';
+          imageUpload.title = 'Upgrade to v1 or higher for image attachments';
+        } else {
+          imageUpload.style.opacity = '1';
+          imageUpload.style.pointerEvents = 'auto';
+          imageUpload.title = '';
+        }
       }
 
       // Auto-reply toggle - v2+
       const autoReplyToggle = document.getElementById('autoReplyToggle');
-      const autoReplyGroup = document.getElementById('autoReplyGroup');
-      if(autoReplyToggle && !perms.canAutoReply){
-        autoReplyToggle.parentElement.style.opacity = '0.5';
-        autoReplyToggle.style.pointerEvents = 'none';
-        autoReplyToggle.parentElement.title = 'Upgrade to v2 or higher for auto-reply';
+      if(autoReplyToggle){
+        if(!perms.canAutoReply){
+          autoReplyToggle.parentElement.style.opacity = '0.5';
+          autoReplyToggle.style.pointerEvents = 'none';
+          autoReplyToggle.parentElement.title = 'Upgrade to v2 or higher for auto-reply';
+        } else {
+          autoReplyToggle.parentElement.style.opacity = '1';
+          autoReplyToggle.style.pointerEvents = 'auto';
+          autoReplyToggle.parentElement.title = '';
+        }
       }
 
       // Send all at once - all tiers
       const sendAllToggle = document.getElementById('sendAllToggle');
-      if(sendAllToggle && !perms.canSendAll){
-        // All tiers have send all, so no lock needed
+      if(sendAllToggle){
+        if(!perms.canSendAll){
+          sendAllToggle.parentElement.style.opacity = '0.5';
+          sendAllToggle.style.pointerEvents = 'none';
+        } else {
+          sendAllToggle.parentElement.style.opacity = '1';
+          sendAllToggle.style.pointerEvents = 'auto';
+        }
       }
     }
 
