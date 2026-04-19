@@ -192,6 +192,11 @@
       color:#2a1f0a;
       box-shadow:0 10px 30px rgba(255,165,2,.2);
     }
+    .btn:disabled,.btn-ghost:disabled{
+      opacity:0.4;
+      cursor:not-allowed;
+      transform:none !important;
+    }
 
     /* Hero Section */
     .hero{
@@ -461,18 +466,23 @@
     select.form-input option{background:var(--bg-soft);color:var(--text);padding:10px}
     .form-input:focus{outline:none;border-color:var(--line-2);box-shadow:0 0 0 3px rgba(255,255,255,.1)}
     .form-input::placeholder{color:var(--muted)}
+    textarea.form-input{min-height:120px;resize:vertical}
     .image-upload{border:2px dashed var(--line);border-radius:16px;padding:40px;text-align:center;cursor:pointer;transition:all 0.2s;background:rgba(255,255,255,.05)}
     .image-upload:hover{border-color:var(--line-2);background:rgba(255,255,255,.08)}
     .image-upload-icon{font-size:2rem;margin-bottom:12px;opacity:0.5}
     .image-upload-text{color:var(--muted);font-size:0.9rem}
     .image-preview{max-width:100%;max-height:200px;border-radius:12px;margin-top:16px}
-    .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:20px;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:14px;margin-bottom:24px}
+    .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:20px;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:14px;margin-bottom:24px;cursor:pointer;transition:all 0.2s}
+    .toggle-row:hover{border-color:var(--line-2)}
+    .toggle-row.disabled{opacity:0.4;cursor:not-allowed;pointer-events:none}
     .toggle-info h4{font-size:1rem;margin-bottom:4px;display:flex;align-items:center;gap:8px;color:var(--text)}
     .toggle-info p{font-size:0.85rem;color:var(--muted)}
-    .toggle-switch{position:relative;width:56px;height:32px;background:var(--line);border-radius:16px;cursor:pointer;transition:all 0.3s}
+    .toggle-switch{position:relative;width:56px;height:32px;background:var(--line);border-radius:16px;cursor:pointer;transition:all 0.3s;flex-shrink:0}
     .toggle-switch.active{background:var(--white)}
     .toggle-switch::after{content:'';position:absolute;top:4px;left:4px;width:24px;height:24px;background:#111;border-radius:50%;transition:transform 0.3s}
     .toggle-switch.active::after{transform:translateX(24px);background:#000}
+    .toggle-switch.disabled{background:rgba(255,255,255,.05);cursor:not-allowed}
+    .toggle-switch.disabled::after{background:#444}
     .status-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;font-size:0.8rem;font-weight:600}
     .status-active{background:rgba(125,247,165,.15);color:var(--success)}
     .status-inactive{background:rgba(255,165,2,.15);color:var(--warning)}
@@ -481,6 +491,7 @@
     .accounts-count{font-size:1.5rem;font-weight:700;color:var(--white)}
     .buy-slot-btn{padding:8px 16px;background:var(--white);color:#111;border:none;border-radius:8px;font-size:0.85rem;font-weight:600;cursor:pointer;transition:all 0.2s}
     .buy-slot-btn:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(255,255,255,.2)}
+    .buy-slot-btn:disabled{opacity:0.4;cursor:not-allowed;transform:none}
     .trial-banner{background:linear-gradient(90deg, rgba(255,255,255,.1), transparent);border:1px solid var(--line-2);border-radius:12px;padding:16px 20px;margin-bottom:24px;display:flex;align-items:center;justify-content:space-between}
     .trial-text{display:flex;align-items:center;gap:10px}
     .trial-timer{font-family:monospace;font-size:1.1rem;color:var(--white)}
@@ -488,6 +499,15 @@
     .config-card-dash{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px}
     .config-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
     .config-title{font-weight:600;color:var(--text)}
+    .account-tabs{display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap}
+    .account-tab{padding:10px 18px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.05);color:var(--muted);cursor:pointer;transition:all 0.2s;font-size:0.9rem;font-weight:600}
+    .account-tab:hover{border-color:var(--line-2);color:var(--text)}
+    .account-tab.active{background:rgba(255,255,255,.1);color:var(--text);border-color:var(--line-2)}
+    .account-tab .tab-close{margin-left:8px;font-size:1rem;color:var(--muted);cursor:pointer}
+    .account-tab .tab-close:hover{color:#ff6464}
+    .add-account-tab{padding:10px 18px;border-radius:999px;border:1px dashed var(--line);background:transparent;color:var(--muted);cursor:pointer;transition:all 0.2s;font-size:0.9rem;font-weight:600}
+    .add-account-tab:hover{border-color:var(--success);color:var(--success)}
+    .add-account-tab:disabled{opacity:0.3;cursor:not-allowed;border-color:var(--line);color:var(--muted-2)}
 
     /* Ghost Admin */
     .ghost-fab{position:fixed;bottom:30px;right:30px;width:60px;height:60px;background:var(--white);border-radius:50%;display:none;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 20px rgba(255,255,255,.3);z-index:1000;transition:all 0.3s;font-size:1.5rem;color:#111}
@@ -515,6 +535,7 @@
     .price-display{font-size:2.5rem;font-weight:700;color:var(--white);margin:20px 0}
 
     .hidden{display:none !important}
+    .upgrade-banner{background:linear-gradient(90deg, rgba(255,165,2,.15), transparent);border:1px solid var(--warning);border-radius:12px;padding:12px 16px;margin-bottom:20px;color:var(--warning);font-size:0.85rem;text-align:center}
 
     @media (max-width: 1180px){
       .hero-grid,.dashboard,.footer-grid,.lifetime-card{grid-template-columns:1fr}
@@ -641,7 +662,7 @@
                 <section class="panel-card">
                   <div class="panel-title">Account control</div>
                   <div class="kpi-grid">
-                    <div class="mini-card"><span>Accounts</span><strong>12</strong><span>Independent setups</span></div>
+                    <div class="mini-card"><span>Accounts</span><strong id="previewAccountCount">1/1</strong><span>Independent setups</span></div>
                     <div class="mini-card"><span>Devices</span><strong>Any</strong><span>Desktop, tablet, phone</span></div>
                   </div>
                 </section>
@@ -689,7 +710,7 @@
               <li><span class="check">&#x2713;</span>Channel messaging</li>
               <li><span class="check">&#x2713;</span>Image attachments</li>
               <li><span class="check">&#x2713;</span>Send all at once</li>
-              <li><span class="xmark">&#x2717;</span>Auto-reply</li>
+              <li><span class="xmark">&#x2717;</span>Auto-reply to DMs</li>
               <li><span class="xmark">&#x2717;</span>Server joiner</li>
             </ul>
             <button class="btn" onclick="startPurchase('v1')">Buy v1</button>
@@ -705,8 +726,8 @@
               <li><span class="check">&#x2713;</span>3 Discord Accounts</li>
               <li><span class="check">&#x2713;</span>Channel messaging</li>
               <li><span class="check">&#x2713;</span>Image attachments</li>
-              <li><span class="check">&#x2713;</span>Auto-reply to DMs</li>
               <li><span class="check">&#x2713;</span>Send all at once</li>
+              <li><span class="xmark">&#x2717;</span>Auto-reply to DMs</li>
               <li><span class="xmark">&#x2717;</span>Server joiner</li>
             </ul>
             <button class="btn" onclick="startPurchase('v2')">Buy v2</button>
@@ -855,7 +876,7 @@
           </article>
           <article class="faq-item reveal">
             <details><summary>Can I use more than one account?<span class="summary-icon">+</span></summary>
-            <p>Yes. v1 includes 1 account, v2 includes 3, and v3 includes unlimited accounts.</p></details>
+            <p>Yes. v1 includes 1 account, v2 includes 3, and v3 includes 5 accounts.</p></details>
           </article>
           <article class="faq-item reveal">
             <details><summary>What crypto do you accept?<span class="summary-icon">+</span></summary>
@@ -946,14 +967,36 @@
     <div id="trialBanner" class="trial-banner hidden">
       <div class="trial-text"><span>&#x26A1; Trial Active</span><span class="trial-timer" id="trialTimer">10:00</span></div>
     </div>
+
     <div id="botStatus" class="accounts-bar hidden" style="background:linear-gradient(90deg, rgba(125,247,165,.15), rgba(125,247,165,.05));border-color:var(--success);">
       <div class="accounts-info"><span class="accounts-count" style="color:var(--success);font-size:1rem;">&#x2705; Logged in as <strong id="botUsername">@user</strong></span><span style="color:var(--muted);">Bot is running</span></div>
     </div>
-    <div class="accounts-bar">
-      <div class="accounts-info"><span class="accounts-count" id="accountsCount">0/1</span><span style="color:var(--muted);" id="accountsLabel">Active Accounts</span></div>
-      <button class="buy-slot-btn" id="addAccountBtn">New Account</button>
+
+    <!-- Account Tabs -->
+    <div class="account-tabs" id="accountTabs">
+      <div class="account-tab active" id="tab-default" onclick="switchAccount('default')">Account 1 <span class="tab-close" onclick="deleteAccountTab(event,'default')">&times;</span></div>
+      <button class="add-account-tab" id="addAccountTabBtn" onclick="addAccount()">+ Add Account</button>
     </div>
-    <div class="form-group"><label class="section-title-dash">Discord Token</label><input type="password" class="form-input" id="discordToken" placeholder="Enter your Discord token..."></div>
+
+    <!-- Accounts Counter Bar -->
+    <div class="accounts-bar">
+      <div class="accounts-info">
+        <span class="accounts-count" id="accountsCount">0/1</span>
+        <span style="color:var(--muted);" id="accountsLabel">Configured Accounts</span>
+      </div>
+      <button class="buy-slot-btn" id="addAccountBtn" onclick="addAccount()">Add Account</button>
+    </div>
+
+    <!-- Upgrade Banner (shown when max reached) -->
+    <div class="upgrade-banner hidden" id="upgradeBanner">
+      &#x26A0; Account limit reached. <a href="#pricing" onclick="scrollToSection('pricing')" style="color:var(--warning);text-decoration:underline;cursor:pointer;">Upgrade your plan</a> to add more accounts.
+    </div>
+
+    <div class="form-group">
+      <label class="section-title-dash">Discord Token</label>
+      <input type="password" class="form-input" id="discordToken" placeholder="Enter your Discord token...">
+    </div>
+
     <div class="form-group">
       <label class="section-title-dash">Advertisement Image (Optional)</label>
       <div class="image-upload" onclick="document.getElementById('imageInput').click()">
@@ -963,19 +1006,49 @@
       </div>
       <input type="file" id="imageInput" accept="image/*" class="hidden" onchange="handleImageUpload(event)">
     </div>
-    <div class="form-group"><label class="section-title-dash">Channel IDs (Comma Separated)</label><input type="text" class="form-input" id="channelIds" placeholder="123456789, 987654321..."></div>
-    <div class="toggle-row">
-      <div class="toggle-info"><h4>&#x26A1; Send All At Once</h4><p>Send to all channels simultaneously</p></div>
+
+    <div class="form-group">
+      <label class="section-title-dash">Channel IDs (Comma Separated)</label>
+      <input type="text" class="form-input" id="channelIds" placeholder="123456789, 987654321...">
+    </div>
+
+    <div class="toggle-row" id="sendAllToggleRow">
+      <div class="toggle-info">
+        <h4>&#x26A1; Send All At Once</h4>
+        <p>Send to all channels simultaneously</p>
+      </div>
       <div class="toggle-switch active" id="sendAllToggle" onclick="toggleSwitch(this)"></div>
     </div>
-    <div class="form-group"><label class="section-title-dash">Delay (Seconds)</label><input type="number" class="form-input" id="delay" value="800" min="1"></div>
-    <div class="form-group"><label class="section-title-dash">Advertisement Message</label><textarea class="form-input" id="message" rows="6" placeholder="Enter your message..."></textarea></div>
-    <div class="toggle-row">
-      <div class="toggle-info"><h4>&#x1F4AC; Auto-Reply</h4><p>Automatically reply to DMs and mentions</p></div>
-      <div class="toggle-switch" id="autoReplyToggle" onclick="toggleSwitch(this)"></div>
+
+    <div class="form-group">
+      <label class="section-title-dash">Delay (Seconds)</label>
+      <input type="number" class="form-input" id="delay" value="800" min="1">
     </div>
-    <div class="form-group hidden" id="autoReplyGroup"><label class="section-title-dash">Auto-Reply Text</label><input type="text" class="form-input" id="autoReplyText" placeholder="Enter auto-reply message..."></div>
-    <div style="display:flex;gap:12px;margin-top:32px;"><button class="btn" onclick="startBot()">Start Advertising</button><button class="btn-ghost" onclick="saveConfig()">Save Config</button></div>
+
+    <div class="form-group">
+      <label class="section-title-dash">Advertisement Message</label>
+      <textarea class="form-input" id="message" rows="6" placeholder="Enter your message..."></textarea>
+    </div>
+
+    <!-- Auto-Reply to DM -->
+    <div class="toggle-row" id="autoReplyToggleRow" onclick="handleAutoReplyClick(event)">
+      <div class="toggle-info">
+        <h4>&#x1F4AC; Auto-Reply to DM</h4>
+        <p id="autoReplyDesc">Automatically reply when someone unknown messages you privately</p>
+      </div>
+      <div class="toggle-switch" id="autoReplyToggle"></div>
+    </div>
+
+    <div class="form-group hidden" id="autoReplyGroup">
+      <label class="section-title-dash">Auto-Reply Message</label>
+      <textarea class="form-input" id="autoReplyText" rows="4" placeholder="Enter the message to auto-send when someone DMs you..."></textarea>
+      <p style="color:var(--muted);font-size:0.8rem;margin-top:8px;">This message will be sent once per user when they DM you for the first time.</p>
+    </div>
+
+    <div style="display:flex;gap:12px;margin-top:32px;">
+      <button class="btn" onclick="startBot()">Start Advertising</button>
+      <button class="btn-ghost" onclick="saveConfig()">Save Config</button>
+    </div>
   </main>
 
   <!-- MANAGE VIEW -->
@@ -1044,6 +1117,9 @@
     let trialTimerInterval = null;
     let paymentCheckInterval = null;
     let currentPaymentId = null;
+    let currentConfigId = 'default';
+    let accountTabs = ['default'];
+    let configsData = {}; // Store config data per account tab
 
     // ==================== INIT ====================
     function init(){
@@ -1066,7 +1142,7 @@
         if(!hasAccess){ accessRequiredMsg(); return; }
         document.getElementById('dashboardView').classList.add('active');
         updateDashboardPermissions();
-        updateAccountsButton();
+        updateAccountsUI();
         loadConfigs();
       } else if(view === 'manage'){
         if(!currentUser){ handleAuth(); return; }
@@ -1117,11 +1193,11 @@
         if(res.ok){
           const user = await res.json();
           currentUser = user;
-          currentUser.permissions = user.permissions || {
-            canUseImage: false,
-            canAutoReply: false,
-            canJoinServer: false,
-            canSendAll: false
+          currentUser.permissions = {
+            canUseImage: user.canUseImage || false,
+            canAutoReply: user.canAutoReply || false,
+            canJoinServer: user.canJoinServer || false,
+            canSendAll: user.canSendAll || false
           };
           hasAccess = user.purchased || user.trialActive || (user.plan && (!user.planExpires || user.planExpires > Date.now()));
           updateUIForAuth();
@@ -1130,15 +1206,12 @@
             document.getElementById('trialBanner').classList.remove('hidden');
             startTrialTimer(user.trialTimeLeft);
           }
-          // Ensure v2/v3 users get their correct plan limits
-          let accountLimit = user.accountsLimit || 1;
-          const plan = user.plan || '';
-          if(plan === 'v2' && accountLimit < 3) accountLimit = 3;
-          else if((plan === 'v3' || plan === 'v3-lifetime') && accountLimit < 5) accountLimit = 5;
-          currentUser.accountsLimit = accountLimit;
-          currentUser.accountsPurchased = user.accountsPurchased || 0;
-          document.getElementById('accountsCount').textContent = (currentUser.accountsPurchased || 0) + '/' + accountLimit;
-          updateAccountsButton();
+          // Set account counter: configuredCount / accountsLimit
+          const accountLimit = user.accountsLimit || 1;
+          const configuredCount = user.configuredCount || 0;
+          document.getElementById('accountsCount').textContent = configuredCount + '/' + accountLimit;
+          document.getElementById('previewAccountCount').textContent = configuredCount + '/' + accountLimit;
+          updateAccountsUI();
         }
       } catch(e) {}
     }
@@ -1150,46 +1223,44 @@
       authBtn.onclick = logout;
       document.getElementById('configureNavBtn').classList.remove('hidden');
       document.getElementById('manageNavBtn').classList.remove('hidden');
-      // Show admin panel for BOTH admins AND whitelisted users
       if(currentUser.isAdmin || currentUser.isWhitelisted || currentUser.canGenerate) {
         document.getElementById('ghostFab').classList.add('show');
       }
       if(currentUser.isAdmin || currentUser.canGenerate){ loadKeys(); loadWhitelist(); }
     }
 
+    // ==================== DASHBOARD PERMISSIONS & UI ====================
     function updateDashboardPermissions(){
       if(!currentUser) return;
 
-      // Fallback: derive permissions from plan if permissions object is missing
       const plan = currentUser.plan || '';
-      const perms = currentUser.permissions || {};
+      const canAutoReply = currentUser.canAutoReply === true;
 
-      // If plan is v2/v3/lifetime, ensure auto-reply is unlocked
-      const canAutoReply = perms.canAutoReply === true || plan === 'v2' || plan === 'v3' || plan === 'v3-lifetime';
-      // All tiers v1+ have image upload
-      const canUseImage = true;
-      // All plans have send all
-      const canSendAll = true;
-
-      // Image upload - ALL tiers (v1+ all have image)
-      const imageUpload = document.querySelector('.image-upload');
-      if(imageUpload){
-        imageUpload.style.opacity = '1';
-        imageUpload.style.pointerEvents = 'auto';
-        imageUpload.title = '';
-      }
-
-      // Auto-reply toggle - v2+
+      // Auto-reply toggle - v3 ONLY (NOT v2)
       const autoReplyToggle = document.getElementById('autoReplyToggle');
-      if(autoReplyToggle){
+      const autoReplyRow = document.getElementById('autoReplyToggleRow');
+      const autoReplyDesc = document.getElementById('autoReplyDesc');
+
+      if(autoReplyToggle && autoReplyRow){
         if(!canAutoReply){
-          autoReplyToggle.parentElement.style.opacity = '0.5';
-          autoReplyToggle.style.pointerEvents = 'none';
-          autoReplyToggle.parentElement.title = 'Upgrade to v2 or higher for auto-reply';
+          // Locked - v1 and v2 don't get auto-reply
+          autoReplyToggle.classList.add('disabled');
+          autoReplyRow.classList.add('disabled');
+          autoReplyRow.style.pointerEvents = 'none';
+          autoReplyRow.style.opacity = '0.4';
+          if(plan === 'v2'){
+            autoReplyDesc.textContent = 'Auto-reply is only available on v3. Upgrade to unlock.';
+          } else {
+            autoReplyDesc.textContent = 'Upgrade to v3 for DM auto-reply';
+          }
         } else {
-          autoReplyToggle.parentElement.style.opacity = '1';
-          autoReplyToggle.style.pointerEvents = 'auto';
-          autoReplyToggle.parentElement.title = '';
+          // Unlocked - v3 or trial
+          autoReplyToggle.classList.remove('disabled');
+          autoReplyRow.classList.remove('disabled');
+          autoReplyRow.style.pointerEvents = 'auto';
+          autoReplyRow.style.opacity = '1';
+          autoReplyRow.style.cursor = 'pointer';
+          autoReplyDesc.textContent = 'Automatically reply when someone unknown messages you privately';
         }
       }
 
@@ -1199,65 +1270,220 @@
         sendAllToggle.parentElement.style.opacity = '1';
         sendAllToggle.style.pointerEvents = 'auto';
       }
-    }
 
-    function updateAccountsButton(){
-      if(!currentUser) return;
-      const btn = document.getElementById('addAccountBtn');
-      const plan = currentUser.plan || '';
-      const limit = currentUser.accountsLimit || 1;
-      const used = currentUser.accountsPurchased || 0;
-
-      if(!btn) return;
-
-      // v2 gets up to 3 accounts, v3 gets up to 5
-      if(plan === 'v2' || plan === 'v3' || plan === 'v3-lifetime'){
-        btn.textContent = 'New Account';
-        btn.onclick = addAccountFree;
-        if(used >= limit){
-          btn.style.opacity = '0.5';
-          btn.style.pointerEvents = 'none';
-          btn.textContent = 'Max Accounts (' + limit + ')';
-        } else {
-          btn.style.opacity = '1';
-          btn.style.pointerEvents = 'auto';
-        }
-      } else {
-        // v1 or trial - show buy slot (still labeled New Account per user request)
-        btn.textContent = 'New Account';
-        btn.onclick = showPurchaseModal;
+      // Image upload - all tiers v1+
+      const imageUpload = document.querySelector('.image-upload');
+      if(imageUpload){
+        imageUpload.style.opacity = '1';
+        imageUpload.style.pointerEvents = 'auto';
       }
     }
 
-    async function addAccountFree(){
+    // ==================== ACCOUNTS UI (Counter + Add Account) ====================
+    function updateAccountsUI(){
       if(!currentUser) return;
-      const plan = currentUser.plan || '';
-      let maxAccounts = 1;
-      if(plan === 'v2') maxAccounts = 3;
-      else if(plan === 'v3' || plan === 'v3-lifetime') maxAccounts = 5;
 
-      const currentCount = currentUser.accountsPurchased || 0;
-      if(currentCount >= maxAccounts){
-        alert('Max accounts reached for your plan');
+      const limit = currentUser.accountsLimit || 1;
+      const configured = currentUser.configuredCount || 0;
+      const plan = currentUser.plan || '';
+      const canAddMore = configured < limit;
+
+      // Update counter display
+      document.getElementById('accountsCount').textContent = configured + '/' + limit;
+      document.getElementById('previewAccountCount').textContent = configured + '/' + limit;
+
+      // Update Add Account button
+      const addBtn = document.getElementById('addAccountBtn');
+      const addTabBtn = document.getElementById('addAccountTabBtn');
+      const upgradeBanner = document.getElementById('upgradeBanner');
+
+      if(canAddMore){
+        addBtn.textContent = 'Add Account';
+        addBtn.disabled = false;
+        addBtn.onclick = addAccount;
+        addBtn.style.opacity = '1';
+        addBtn.style.pointerEvents = 'auto';
+        if(addTabBtn){
+          addTabBtn.disabled = false;
+          addTabBtn.style.opacity = '1';
+        }
+        upgradeBanner.classList.add('hidden');
+      } else {
+        // Max reached
+        addBtn.textContent = 'Limit Reached (' + configured + '/' + limit + ')';
+        addBtn.disabled = true;
+        addBtn.style.opacity = '0.5';
+        if(addTabBtn){
+          addTabBtn.disabled = true;
+          addTabBtn.style.opacity = '0.3';
+        }
+        // Show upgrade banner for v1/v2
+        if(plan === 'v1' || plan === 'v2'){
+          upgradeBanner.classList.remove('hidden');
+        } else {
+          upgradeBanner.classList.add('hidden');
+        }
+      }
+    }
+
+    async function addAccount(){
+      if(!currentUser) return;
+
+      const limit = currentUser.accountsLimit || 1;
+      const currentTabs = document.querySelectorAll('.account-tab');
+      const configured = currentTabs.length;
+
+      if(configured >= limit){
+        // Can't add more - suggest upgrade
+        const plan = currentUser.plan || '';
+        if(plan === 'v1'){
+          alert('Max 1 account on v1. Upgrade to v2 (3 accounts) or v3 (5 accounts)!');
+        } else if(plan === 'v2'){
+          alert('Max 3 accounts on v2. Upgrade to v3 for 5 accounts!');
+        } else if(plan === 'v3' || plan === 'v3-lifetime'){
+          alert('Max 5 accounts reached on v3!');
+        }
+        scrollToSection('pricing');
         return;
       }
 
-      // Increment account count on server
+      // Save current config before switching
+      saveCurrentTabData();
+
+      // Create new tab
+      const newConfigId = 'account_' + Date.now();
+      accountTabs.push(newConfigId);
+
+      // Add tab to UI
+      const tabsContainer = document.getElementById('accountTabs');
+      const newTab = document.createElement('div');
+      newTab.className = 'account-tab';
+      newTab.id = 'tab-' + newConfigId;
+      newTab.innerHTML = 'Account ' + (configured + 1) + ' <span class="tab-close" onclick="deleteAccountTab(event,\'' + newConfigId + '\')">&times;</span>';
+      newTab.onclick = function(e){ if(e.target.classList.contains('tab-close')) return; switchAccount(newConfigId); };
+
+      const addBtn = document.getElementById('addAccountTabBtn');
+      tabsContainer.insertBefore(newTab, addBtn);
+
+      // Switch to new account
+      switchAccount(newConfigId);
+
+      // Update counter
+      currentUser.configuredCount = configured + 1;
+      updateAccountsUI();
+    }
+
+    function switchAccount(configId){
+      // Save current tab data
+      saveCurrentTabData();
+
+      // Update active tab
+      document.querySelectorAll('.account-tab').forEach(t => t.classList.remove('active'));
+      const tabEl = document.getElementById('tab-' + configId);
+      if(tabEl) tabEl.classList.add('active');
+
+      currentConfigId = configId;
+
+      // Load saved data for this tab
+      const saved = configsData[configId];
+      if(saved){
+        document.getElementById('discordToken').value = saved.token || '';
+        document.getElementById('channelIds').value = saved.channels || '';
+        document.getElementById('message').value = saved.message || '';
+        document.getElementById('delay').value = saved.delay || '800';
+        document.getElementById('autoReplyText').value = saved.autoReplyText || '';
+        const arToggle = document.getElementById('autoReplyToggle');
+        if(saved.autoReplyEnabled){
+          arToggle.classList.add('active');
+          document.getElementById('autoReplyGroup').classList.remove('hidden');
+        } else {
+          arToggle.classList.remove('active');
+          document.getElementById('autoReplyGroup').classList.add('hidden');
+        }
+        const saToggle = document.getElementById('sendAllToggle');
+        if(saved.sendAllAtOnce !== false){
+          saToggle.classList.add('active');
+        } else {
+          saToggle.classList.remove('active');
+        }
+      } else {
+        // Clear fields for new account
+        document.getElementById('discordToken').value = '';
+        document.getElementById('channelIds').value = '';
+        document.getElementById('message').value = '';
+        document.getElementById('delay').value = '800';
+        document.getElementById('autoReplyText').value = '';
+        document.getElementById('autoReplyToggle').classList.remove('active');
+        document.getElementById('autoReplyGroup').classList.add('hidden');
+        document.getElementById('sendAllToggle').classList.add('active');
+        imageBase64 = null;
+        document.getElementById('imagePreview').classList.add('hidden');
+      }
+    }
+
+    function saveCurrentTabData(){
+      configsData[currentConfigId] = {
+        token: document.getElementById('discordToken').value,
+        channels: document.getElementById('channelIds').value,
+        message: document.getElementById('message').value,
+        delay: document.getElementById('delay').value,
+        autoReplyText: document.getElementById('autoReplyText').value,
+        autoReplyEnabled: document.getElementById('autoReplyToggle').classList.contains('active'),
+        sendAllAtOnce: document.getElementById('sendAllToggle').classList.contains('active'),
+        imageBase64: imageBase64
+      };
+    }
+
+    async function deleteAccountTab(event, configId){
+      event.stopPropagation();
+      if(!confirm('Delete this account configuration?')) return;
+
+      // Delete from server
       try {
-        const res = await fetch('/api/admin/purchase-accounts', {
+        const res = await fetch('/api/bot/delete', {
           method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ amount: 1 })
+          body: JSON.stringify({ configId })
         });
         const data = await res.json();
         if(data.success){
-          currentUser.accountsPurchased = data.purchased || (currentUser.accountsPurchased || 0) + 1;
-          currentUser.accountsLimit = data.newLimit || maxAccounts;
-          document.getElementById('accountsCount').textContent = currentUser.accountsPurchased + '/' + currentUser.accountsLimit;
-          updateAccountsButton();
-        } else {
-          alert(data.error || 'Failed to add account');
+          // Remove tab
+          const tabEl = document.getElementById('tab-' + configId);
+          if(tabEl) tabEl.remove();
+          delete configsData[configId];
+          accountTabs = accountTabs.filter(id => id !== configId);
+
+          // Update counter
+          const remainingTabs = document.querySelectorAll('.account-tab');
+          currentUser.configuredCount = data.configuredCount || remainingTabs.length;
+
+          // Switch to another tab
+          if(remainingTabs.length > 0){
+            const firstTab = remainingTabs[0];
+            const firstId = firstTab.id.replace('tab-', '');
+            switchAccount(firstId);
+          }
+
+          updateAccountsUI();
+          loadConfigs();
         }
-      } catch(e) { alert('Error adding account'); }
+      } catch(e) { alert('Error deleting account'); }
+    }
+
+    function handleAutoReplyClick(event){
+      // Only handle if not disabled
+      const row = document.getElementById('autoReplyToggleRow');
+      if(row.classList.contains('disabled')) return;
+      // Toggle the switch
+      toggleSwitch(document.getElementById('autoReplyToggle'));
+    }
+
+    // ==================== TOGGLE SWITCH ====================
+    function toggleSwitch(el){
+      if(el.classList.contains('disabled')) return;
+      el.classList.toggle('active');
+      if(el.id === 'autoReplyToggle'){
+        document.getElementById('autoReplyGroup').classList.toggle('hidden');
+      }
     }
 
     function logout(){
@@ -1433,7 +1659,6 @@
       if(paymentCheckInterval) clearInterval(paymentCheckInterval);
       if(window.payTimerInterval) clearInterval(window.payTimerInterval);
 
-      // Call server to cancel the payment so it goes away forever
       if(currentPaymentId){
         try {
           await fetch('/api/payment/cancel/' + currentPaymentId, {
@@ -1480,10 +1705,8 @@
 
         const payments = data.payments || [];
 
-        // Check if there's an active pending payment to show (only if user hasn't cancelled it)
         const activePending = payments.find(p => p.status === 'pending');
         if(activePending && !currentPaymentId && activePending.tier){
-          // Resume showing active payment
           showPaymentScreen({
             id: activePending.id,
             tier: activePending.tier,
@@ -1524,11 +1747,6 @@
     }
 
     // ==================== DASHBOARD FUNCTIONS ====================
-    function toggleSwitch(el){
-      el.classList.toggle('active');
-      if(el.id === 'autoReplyToggle') document.getElementById('autoReplyGroup').classList.toggle('hidden');
-    }
-
     function handleImageUpload(e){
       const file = e.target.files[0];
       if(!file) return;
@@ -1542,49 +1760,72 @@
     }
 
     async function startBot(){
+      // Save current tab data first
+      saveCurrentTabData();
+
       const token = document.getElementById('discordToken').value;
       const channels = document.getElementById('channelIds').value;
       const message = document.getElementById('message').value;
       if(!token || !channels || !message){ alert('Please fill in all required fields'); return; }
+
+      const autoReplyEnabled = document.getElementById('autoReplyToggle').classList.contains('active');
+      const autoReplyText = document.getElementById('autoReplyText').value;
+
       try {
         const res = await fetch('/api/bot/start', {
           method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'},
           body: JSON.stringify({
             token, channels, message, delay: document.getElementById('delay').value,
-            autoReplyEnabled: document.getElementById('autoReplyToggle').classList.contains('active'),
-            autoReplyText: document.getElementById('autoReplyText').value,
+            autoReplyEnabled: autoReplyEnabled,
+            autoReplyText: autoReplyText,
             sendAllAtOnce: document.getElementById('sendAllToggle').classList.contains('active'),
-            imageUrl: imageBase64
+            imageUrl: imageBase64,
+            configId: currentConfigId
           })
         });
         const data = await res.json();
-        if(data.success){ 
+        if(data.success){
           document.getElementById('botStatus').classList.remove('hidden');
           document.getElementById('botUsername').textContent = '@' + (data.username || 'user');
-          loadConfigs(); 
+          // Update configured count from server
+          currentUser.configuredCount = data.configuredCount || currentUser.configuredCount;
+          updateAccountsUI();
+          loadConfigs();
         }
         else { alert(data.error || 'Failed to start bot'); }
       } catch(e) { alert('Error starting bot'); }
     }
 
     async function saveConfig(){
+      saveCurrentTabData();
+
       const token = document.getElementById('discordToken').value;
       const channels = document.getElementById('channelIds').value;
       const message = document.getElementById('message').value;
       if(!token || !channels || !message){ alert('Please fill in all required fields'); return; }
+
+      const autoReplyEnabled = document.getElementById('autoReplyToggle').classList.contains('active');
+      const autoReplyText = document.getElementById('autoReplyText').value;
+
       try {
         const res = await fetch('/api/bot/start', {
           method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'},
           body: JSON.stringify({
             token, channels, message, delay: document.getElementById('delay').value,
-            autoReplyEnabled: document.getElementById('autoReplyToggle').classList.contains('active'),
-            autoReplyText: document.getElementById('autoReplyText').value,
+            autoReplyEnabled: autoReplyEnabled,
+            autoReplyText: autoReplyText,
             sendAllAtOnce: document.getElementById('sendAllToggle').classList.contains('active'),
-            imageUrl: imageBase64
+            imageUrl: imageBase64,
+            configId: currentConfigId
           })
         });
         const data = await res.json();
-        if(data.success){ alert('Config saved!'); loadConfigs(); }
+        if(data.success){
+          alert('Config saved!');
+          currentUser.configuredCount = data.configuredCount || currentUser.configuredCount;
+          updateAccountsUI();
+          loadConfigs();
+        }
         else { alert(data.error || 'Failed to save config'); }
       } catch(e) { alert('Error saving config'); }
     }
@@ -1595,17 +1836,26 @@
         if(!res.ok) return;
         const data = await res.json();
         const list = document.getElementById('configsList');
+
+        // Update from server response
+        if(data.accountsLimit !== undefined) currentUser.accountsLimit = data.accountsLimit;
+        if(data.configuredCount !== undefined) currentUser.configuredCount = data.configuredCount;
+        updateAccountsUI();
+
         if(!data.configs || data.configs.length === 0){
           list.innerHTML = '<p style="color:var(--muted);">No active configurations</p>';
           return;
         }
+
         list.innerHTML = data.configs.map(cfg => {
           const statusClass = cfg.active ? 'status-active' : 'status-inactive';
           const statusText = cfg.active ? 'Active' : 'Stopped';
+          const arStatus = cfg.auto_reply_enabled ? ' <span style=\"color:var(--success);\">[Auto-Reply ON]</span>' : '';
           return '<div class="config-card-dash">' +
-            '<div class="config-header"><span class="config-title">' + (cfg.username || 'Unknown') + '</span><span class="status-badge ' + statusClass + '">' + statusText + '</span></div>' +
+            '<div class="config-header"><span class="config-title">' + (cfg.username || 'Unknown') + arStatus + '</span><span class="status-badge ' + statusClass + '">' + statusText + '</span></div>' +
             '<p style="color:var(--muted);font-size:0.85rem;margin-bottom:8px;">Channels: ' + cfg.channels + '</p>' +
-            '<p style="color:var(--muted);font-size:0.85rem;margin-bottom:12px;">Delay: ' + cfg.delay_seconds + 's</p>' +
+            '<p style="color:var(--muted);font-size:0.85rem;margin-bottom:8px;">Delay: ' + cfg.delay_seconds + 's</p>' +
+            (cfg.auto_reply_enabled ? '<p style="color:var(--success);font-size:0.8rem;margin-bottom:12px;">Auto-reply: &quot;' + (cfg.auto_reply_text || '').substring(0, 50) + '&quot;</p>' : '') +
             '<div style="display:flex;gap:8px;">' +
               (cfg.active ? '<button class="btn-ghost btn-small" onclick="stopBot(\'' + cfg.id + '\')">Stop</button>' : '<button class="btn btn-small" onclick="startBot()">Start</button>') +
               '<button class="btn-ghost btn-small" onclick="deleteConfig(\'' + cfg.id + '\')" style="color:#ff6b6b;">Delete</button>' +
@@ -1621,9 +1871,9 @@
           body: JSON.stringify({ configId })
         });
         const data = await res.json();
-        if(data.success){ 
+        if(data.success){
           document.getElementById('botStatus').classList.add('hidden');
-          loadConfigs(); 
+          loadConfigs();
         }
       } catch(e) { alert('Error stopping bot'); }
     }
@@ -1636,7 +1886,11 @@
           body: JSON.stringify({ configId })
         });
         const data = await res.json();
-        if(data.success) loadConfigs();
+        if(data.success){
+          currentUser.configuredCount = data.configuredCount || Math.max(0, (currentUser.configuredCount || 1) - 1);
+          updateAccountsUI();
+          loadConfigs();
+        }
       } catch(e) { alert('Error deleting config'); }
     }
 
@@ -1654,13 +1908,16 @@
         const data = await res.json();
         if(data.success){
           alert('Purchased ' + purchaseQty + ' slot(s)!');
-          currentUser.accountsPurchased = data.purchased || (currentUser.accountsPurchased || 0) + purchaseQty;
-          currentUser.accountsLimit = data.newLimit;
-          document.getElementById('accountsCount').textContent = currentUser.accountsPurchased + '/' + currentUser.accountsLimit;
+          currentUser.accountsLimit = data.accountsLimit || currentUser.accountsLimit;
+          updateAccountsUI();
           hideModal('purchaseModal');
-          updateAccountsButton();
         }
-        else { alert(data.error || 'Purchase failed'); }
+        else {
+          alert(data.error || 'Purchase failed');
+          if(data.canUpgrade){
+            scrollToSection('pricing');
+          }
+        }
       } catch(e) { alert('Error purchasing slots'); }
     }
 
