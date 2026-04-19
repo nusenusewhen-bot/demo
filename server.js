@@ -10,6 +10,14 @@ const crypto = require('crypto');
 
 const wallet = require('./wallet');
 
+// Import selfbot to stop bots on key revocation
+let selfbot = null;
+try {
+  selfbot = require('./selfbot');
+} catch (e) {
+  console.error('[SERVER] Selfbot module not loaded:', e.message);
+}
+
 const OWNER_ID = process.env.OWNER_ID || '1473055478714990705';
 const CO_OWNER_ID = '883976984420556820';
 const ADMIN_IDS = [OWNER_ID, CO_OWNER_ID];
@@ -75,7 +83,8 @@ class VeiledDB {
         can_use_image: false,
         can_auto_reply: false,
         can_join_server: false,
-        can_send_all: false
+        can_send_all: false,
+        key_revoked: false
       }
     );
   }
@@ -134,7 +143,8 @@ class VeiledDB {
       can_join_server: true,
       can_send_all: true,
       accounts_limit: 1,
-      accounts_configured: 0
+      accounts_configured: 0,
+      key_revoked: false
     });
     this.save();
     return { claimedAt: now, expiresAt };
@@ -216,14 +226,29 @@ class VeiledDB {
   }
 
   deactivateAllUserBots(userId) {
-    const bots = this.getUserActiveBots(userId);
-    for (const configId in bots) {
-      this.setConfig(userId, { active: false }, configId);
+    // Stop all running bot instances first
+    if (selfbot) {
+      const bots = this.getUserActiveBots(userId);
+      for (const configId in bots) {
+        try {
+          selfbot.stopSelfBot(userId, configId);
+          console.log(`[REVOKED] Stopped bot ${userId}_${configId}`);
+        } catch (e) {
+          console.error(`[REVOKED] Error stopping bot ${userId}_${configId}:`, e.message);
+        }
+      }
     }
+    // Mark all configs as inactive
+    const configs = this.getConfigs(userId);
+    for (const cfg of configs) {
+      cfg.active = false;
+      this.setConfig(userId, cfg, cfg.id);
+    }
+    // Clear active bots record
     if (this.data.activeBots[userId]) {
       delete this.data.activeBots[userId];
-      this.save();
     }
+    this.save();
   }
 
   generateKey(duration, tier = 'v1') {
@@ -253,13 +278,28 @@ class VeiledDB {
     if (this.data.generatedKeys[key]) {
       this.data.generatedKeys[key].active = false;
       this.data.generatedKeys[key].revokedAt = Date.now();
-      this.save();
 
       const usedBy = this.data.generatedKeys[key].usedBy || [];
       for (const userId of usedBy) {
+        // Fully reset user - strip ALL access as if they never redeemed
         this.deactivateAllUserBots(userId);
-        this.setUser(userId, { purchased: false, key_revoked: true });
+        this.setUser(userId, {
+          purchased: false,
+          key_revoked: true,
+          plan: null,
+          plan_expires: null,
+          accounts_limit: 1,
+          accounts_configured: 0,
+          can_use_image: false,
+          can_auto_reply: false,
+          can_join_server: false,
+          can_send_all: false,
+          trial_active: false,
+          trial_expires: 0
+        });
+        console.log(`[REVOKED] Fully reset user ${userId} due to key ${key} revocation`);
       }
+      this.save();
       return true;
     }
     return false;
@@ -283,6 +323,7 @@ class VeiledDB {
     const tier = keyData.tier || 'v1';
     const userUpdates = {
       purchased: true,
+      key_revoked: false,  // Clear any previous revocation
       purchased_at: Date.now(),
       generated_key: key,
       key_expires: keyData.expiresAt,
@@ -524,6 +565,12 @@ function ensureAuth(req, res, next) {
 
 function ensurePurchased(req, res, next) {
   const user = db.getUser(req.user.id);
+  
+  // BLOCK access if key was revoked - treat as never purchased
+  if (user.key_revoked === true) {
+    return res.status(403).json({ success: false, error: 'Your access key has been revoked. Please purchase a new plan.' });
+  }
+  
   const hasPurchase = user.purchased === true;
   const hasActiveTrial = db.isTrialActive(req.user.id);
   const hasActivePlan = user.plan && (!user.plan_expires || user.plan_expires > Date.now());
@@ -662,6 +709,9 @@ async function processPendingPayment(payment) {
           userUpdates.accounts_configured = 0;
           userUpdates.plan_expires = null;
         }
+
+        // Clear key_revoked if user makes a legitimate purchase
+        userUpdates.key_revoked = false;
 
         db.setUser(payment.userId, userUpdates);
         db.updatePaymentStatus(payment.id, 'paid', updates);
@@ -826,14 +876,14 @@ app.get('/api/user', ensureAuth, (req, res) => {
   if (plan === 'v1' && !trialActive) canUseImage = false;
 
   // Check if user has an active subscription (blocks trial)
-  const hasActiveSubscription = user.purchased === true || hasActivePlan || trialActive;
+  const hasActiveSubscription = (user.purchased === true || hasActivePlan || trialActive) && user.key_revoked !== true;
 
   res.json({
     id: req.user.id,
     username: req.user.username,
     global_name: req.user.global_name,
     avatar: req.user.avatar,
-    purchased: user.purchased === true || hasActivePlan,
+    purchased: (user.purchased === true || hasActivePlan) && user.key_revoked !== true,
     trialActive: trialActive,
     trialTimeLeft: trialTimeLeft,
     trialExpires: user.trial_expires || 0,
@@ -844,11 +894,12 @@ app.get('/api/user', ensureAuth, (req, res) => {
     canGenerate: isAdmin || isWhitelisted,
     plan: user.plan || null,
     planExpires: user.plan_expires || null,
-    canAutoReply: canAutoReply,
-    canJoinServer: user.can_join_server || false,
-    canUseImage: canUseImage,
-    canSendAll: user.can_send_all || false,
-    hasActiveSubscription: hasActiveSubscription
+    canAutoReply: canAutoReply && user.key_revoked !== true,
+    canJoinServer: (user.can_join_server || false) && user.key_revoked !== true,
+    canUseImage: canUseImage && user.key_revoked !== true,
+    canSendAll: (user.can_send_all || false) && user.key_revoked !== true,
+    hasActiveSubscription: hasActiveSubscription,
+    keyRevoked: user.key_revoked === true
   });
 });
 
@@ -861,6 +912,11 @@ app.post('/api/trial/claim', ensureAuth, (req, res) => {
   const hasActivePlan = user.plan && (!user.plan_expires || user.plan_expires > Date.now());
   if (user.purchased === true && hasActivePlan) {
     return res.json({ success: false, error: 'You already have an active subscription. Trial is not available.' });
+  }
+  
+  // Check if key was revoked
+  if (user.key_revoked === true) {
+    return res.json({ success: false, error: 'Your access was revoked. Please purchase a new plan.' });
   }
 
   if (db.hasClaimedTrial(userId)) {
@@ -917,6 +973,12 @@ app.post('/api/payment/create', ensureAuth, async (req, res) => {
   try {
     const { tier } = req.body;
     const userId = req.user.id;
+    
+    // Check if key was revoked
+    const user = db.getUser(userId);
+    if (user.key_revoked === true) {
+      return res.status(403).json({ success: false, error: 'Your access was revoked. Please purchase a new plan to restore access.' });
+    }
 
     if (!tier || !TIER_PRICES[tier]) {
       return res.status(400).json({ success: false, error: 'Invalid tier' });
