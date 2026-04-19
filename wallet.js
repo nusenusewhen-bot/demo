@@ -12,6 +12,15 @@ const ECPair = ECPairFactory(ecc);
 
 const network = bitcoin.networks.litecoin;
 
+const skipLogged = new Set();
+
+function looksLikeNonLitecoinAddress(address) {
+  if (!address || typeof address !== 'string') return true;
+  const a = address.trim();
+  if (a.startsWith('1') || a.startsWith('bc1') || a.startsWith('tb1')) return true;
+  return false;
+}
+
 function getMnemonic() {
   const m = process.env.WALLET_MNEMONIC || process.env.LTC_SEED_PHRASE;
   if (!m || typeof m !== 'string') {
@@ -62,6 +71,16 @@ async function fetchTxHex(txid) {
 }
 
 async function checkAddressBalance(address) {
+  if (looksLikeNonLitecoinAddress(address)) {
+    if (!skipLogged.has(address)) {
+      skipLogged.add(address);
+      console.warn(
+        '[WALLET] Skipping API for non-Litecoin address (fix/remove bad rows in data/veiled_db.json):',
+        address
+      );
+    }
+    return 0;
+  }
   try {
     const data = await fetchJson(`https://litecoinspace.org/api/address/${address}`);
     const chain = data.chain_stats || {};
@@ -85,9 +104,6 @@ async function broadcastTx(hex) {
   return typeof res.data === 'string' ? res.data : res.data && res.data.txid ? res.data.txid : String(res.data);
 }
 
-/**
- * Sweep all confirmed UTXOs from fromAddress to toAddress using privateKeyWIF.
- */
 async function createTransaction(privateKeyWIF, fromAddress, toAddress) {
   if (!privateKeyWIF || !fromAddress || !toAddress) {
     console.error('[WALLET] Missing sweep params');
