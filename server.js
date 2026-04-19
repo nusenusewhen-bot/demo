@@ -771,6 +771,11 @@ app.get('/api/user', ensureAuth, (req, res) => {
   else if (plan === 'v3' || plan === 'v3-lifetime') accountsLimit = 5;
   else if (!plan && (user.purchased || trialActive || hasActivePlan)) accountsLimit = 1;
 
+  const canAutoReply =
+    plan === 'v3' || plan === 'v3-lifetime' ? true : !!user.can_auto_reply;
+  let canUseImage = !!user.can_use_image;
+  if (plan === 'v1' && !trialActive) canUseImage = false;
+
   res.json({
     id: req.user.id,
     username: req.user.username,
@@ -787,9 +792,9 @@ app.get('/api/user', ensureAuth, (req, res) => {
     canGenerate: isAdmin || isWhitelisted,
     plan: user.plan || null,
     planExpires: user.plan_expires || null,
-    canAutoReply: user.can_auto_reply || false,
+    canAutoReply: canAutoReply,
     canJoinServer: user.can_join_server || false,
-    canUseImage: user.can_use_image || false,
+    canUseImage: canUseImage,
     canSendAll: user.can_send_all || false
   });
 });
@@ -849,7 +854,7 @@ const TIER_PRICES = {
   v1: 1.0,
   v2: 1.5,
   v3: 2.5,
-  'v3-lifetime': 35.0
+  'v3-lifetime': 25.0
 };
 
 app.post('/api/payment/create', ensureAuth, async (req, res) => {
