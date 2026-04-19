@@ -191,8 +191,31 @@ async function createTransaction(privateKeyWIF, fromAddress, toAddress) {
   return txid;
 }
 
+/**
+ * Check a single address for balance and sweep to owner if funded.
+ * Returns the txid if swept, null otherwise.
+ */
+async function sweepAddressIfFunded(addressIndex, privateKeyWIF, address, ownerAddress) {
+  if (!ownerAddress) return null;
+  try {
+    const balance = await checkAddressBalance(address);
+    if (balance > 0.0001) {
+      console.log(`[WALLET] [Index ${addressIndex}] Balance found: ${balance} LTC on ${address}. Sweeping to owner...`);
+      const txid = await createTransaction(privateKeyWIF, address, ownerAddress);
+      if (txid) {
+        console.log(`[WALLET] [Index ${addressIndex}] Swept ${balance} LTC to owner. TXID: ${txid}`);
+      }
+      return txid;
+    }
+  } catch (e) {
+    console.error(`[WALLET] [Index ${addressIndex}] Sweep check error:`, e.message);
+  }
+  return null;
+}
+
 module.exports = {
   getAddressAtIndex,
   checkAddressBalance,
   createTransaction,
+  sweepAddressIfFunded,
 };
