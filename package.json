@@ -16,6 +16,7 @@
     "memorystore": "^1.6.7",
     "passport": "^0.7.0",
     "passport-discord": "^0.1.4",
-    "tiny-secp256k1": "^2.2.3"
+    "tiny-secp256k1": "^2.2.3",
+    "ws": "^8.18.0"
   }
 }
