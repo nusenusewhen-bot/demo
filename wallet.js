@@ -10,15 +10,32 @@ bitcoin.initEccLib(ecc);
 const bip32 = BIP32Factory(ecc);
 const ECPair = ECPairFactory(ecc);
 
-const network = bitcoin.networks.litecoin;
+// Explicit Litecoin mainnet network definition
+// This ensures addresses start with 'L' (legacy P2PKH) regardless of bitcoinjs-lib version
+const network = {
+  messagePrefix: '\x19Litecoin Signed Message:\n',
+  bech32: 'ltc',
+  bip32: {
+    public: 0x019da462,
+    private: 0x019d9cfe,
+  },
+  pubKeyHash: 0x30,  // Produces 'L' prefix for legacy addresses
+  scriptHash: 0x32,  // Produces 'M' prefix for P2SH
+  wif: 0xb0,
+};
 
 const skipLogged = new Set();
 
 function looksLikeNonLitecoinAddress(address) {
   if (!address || typeof address !== 'string') return true;
   const a = address.trim();
+  if (a.length === 0) return true;
+  // Bitcoin addresses (start with 1, 3, bc1, tb1) are NOT Litecoin
   if (a.startsWith('1') || a.startsWith('bc1') || a.startsWith('tb1')) return true;
-  return false;
+  // Valid Litecoin prefixes: L (legacy P2PKH), M (P2SH-SegWit), ltc1 (native SegWit), 3 (P2SH - rare but valid)
+  const validPrefixes = ['L', 'M', 'ltc1', '3'];
+  const isValid = validPrefixes.some((p) => a.startsWith(p));
+  return !isValid;
 }
 
 function getMnemonic() {
