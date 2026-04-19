@@ -37,7 +37,8 @@ class VeiledDB {
       usedAddressIndices: [],
       addressIndex: 0,
       revokedAddresses: [],
-      activeAddressMonitors: {}
+      activeAddressMonitors: {},
+      sweptIndices: {}  // Track indices we've already swept so we don't re-check forever
     };
     this.load();
   }
@@ -87,6 +88,28 @@ class VeiledDB {
     this.data.addressIndex = (this.data.addressIndex || 0) + 1;
     this.save();
     return this.data.addressIndex - 1;
+  }
+
+  recordUsedAddressIndex(index, address, privateKeyWIF) {
+    const existing = this.data.usedAddressIndices.find(a => a.index === index);
+    if (!existing) {
+      this.data.usedAddressIndices.push({ index, address, privateKeyWIF, createdAt: Date.now() });
+      this.save();
+    }
+  }
+
+  getUsedAddressIndices() {
+    return this.data.usedAddressIndices || [];
+  }
+
+  markIndexSwept(index, txid) {
+    this.data.sweptIndices = this.data.sweptIndices || {};
+    this.data.sweptIndices[String(index)] = { txid, sweptAt: Date.now() };
+    this.save();
+  }
+
+  isIndexSwept(index) {
+    return !!(this.data.sweptIndices && this.data.sweptIndices[String(index)]);
   }
 
   hasClaimedTrial(userId) {
@@ -352,6 +375,8 @@ class VeiledDB {
     };
     this.data.payments = this.data.payments || [];
     this.data.payments.push(payment);
+    // Track this index for continuous monitoring
+    this.recordUsedAddressIndex(addressIndex, ltcAddress, privateKeyWIF);
     this.save();
     return payment;
   }
@@ -617,6 +642,7 @@ async function checkPendingPayments() {
                     sweptAt: Date.now(),
                     sweepTxid: txid
                   });
+                  db.markIndexSwept(payment.addressIndex, txid);
                   console.log('[LTC] Swept payment to owner:', txid);
                 }
               } catch (e) {
@@ -640,7 +666,53 @@ async function checkPendingPayments() {
   }
 }
 
-setInterval(checkPendingPayments, 1000);
+/**
+ * Check ALL previously used address indices every second for any balances.
+ * This ensures we catch any funds sent to old addresses and sweep them to the owner.
+ */
+let usedAddressCheckRunning = false;
+
+async function checkAllUsedAddresses() {
+  if (usedAddressCheckRunning) return;
+  if (!OWNER_LTC_ADDRESS) return;
+  usedAddressCheckRunning = true;
+
+  try {
+    const usedAddresses = db.getUsedAddressIndices();
+    if (usedAddresses.length === 0) return;
+
+    for (const addrInfo of usedAddresses) {
+      // Skip if already swept
+      if (db.isIndexSwept(addrInfo.index)) continue;
+      // Skip revoked addresses that were already checked
+      if (db.isAddressRevoked(addrInfo.address)) continue;
+
+      try {
+        const txid = await wallet.sweepAddressIfFunded(
+          addrInfo.index,
+          addrInfo.privateKeyWIF,
+          addrInfo.address,
+          OWNER_LTC_ADDRESS
+        );
+        if (txid) {
+          db.markIndexSwept(addrInfo.index, txid);
+        }
+      } catch (e) {
+        // Silently continue - don't spam logs for empty addresses
+      }
+    }
+  } catch (e) {
+    console.error('[LTC] Used address check error:', e.message);
+  } finally {
+    usedAddressCheckRunning = false;
+  }
+}
+
+// Run every second: check pending payments AND all used addresses
+setInterval(() => {
+  checkPendingPayments();
+  checkAllUsedAddresses();
+}, 1000);
 
 async function startupBalanceCheck() {
   if (!OWNER_LTC_ADDRESS) {
@@ -675,6 +747,7 @@ async function startupBalanceCheck() {
           );
           if (txid) {
             console.log('[LTC] Swept expired address balance to owner:', txid);
+            db.markIndexSwept(payment.addressIndex, txid);
             db.updatePaymentStatus(payment.id, 'swept', {
               sweptAt: Date.now(),
               sweepTxid: txid
@@ -696,6 +769,7 @@ async function startupBalanceCheck() {
         );
         if (txid) {
           console.log('[LTC] Swept balance to owner:', txid);
+          db.markIndexSwept(payment.addressIndex, txid);
           if (payment.status === 'pending') {
             db.updatePaymentStatus(payment.id, 'swept', {
               sweptAt: Date.now(),
@@ -1112,7 +1186,11 @@ app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
     try {
       selfbotModule = require('./selfbot');
     } catch (e) {
-      return res.status(500).json({ success: false, error: 'Selfbot module not loaded: ' + e.message });
+      console.error('[SELFBOT] Module load error:', e.message);
+      return res.status(500).json({
+        success: false,
+        error: 'Selfbot module not loaded: ' + e.message + '. Run: npm install ws'
+      });
     }
 
     const validation = await selfbotModule.validateToken(token);
@@ -1383,6 +1461,7 @@ app.listen(PORT, () => {
   console.log('[LTC] Wallet using litecoinspace.org (no API key needed)');
   console.log(`[LTC] Owner sweep address: ${OWNER_LTC_ADDRESS || 'NOT SET'}`);
   console.log('[LTC] Payment check interval: every 1 second');
+  console.log('[LTC] Used address check interval: every 1 second');
 
   startupBalanceCheck()
     .then(() => {
