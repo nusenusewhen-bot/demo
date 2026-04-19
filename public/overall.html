@@ -547,6 +547,9 @@
     .hidden{display:none !important}
     .upgrade-banner{background:linear-gradient(90deg, rgba(255,165,2,.15), transparent);border:1px solid var(--warning);border-radius:12px;padding:12px 16px;margin-bottom:20px;color:var(--warning);font-size:0.85rem;text-align:center}
 
+    /* Pricing Tab Hide */
+    .pricing-hidden .pricing-section-container{display:none !important}
+
     @media (max-width: 1180px){
       .hero-grid,.dashboard,.footer-grid,.lifetime-card{grid-template-columns:1fr}
       .services-grid{grid-template-columns:1fr 1fr}
@@ -591,6 +594,7 @@
   </style>
 <base target="_blank">
 <base target="_blank">
+<base target="_blank">
 </head>
 <body>
   <!-- Navigation -->
@@ -604,7 +608,7 @@
         <div class="nav-links" id="navLinks">
           <a href="#" onclick="showView('landing')">Home</a>
           <a href="#services" onclick="navigateToSection('services')">Services</a>
-          <a href="#pricing" onclick="navigateToSection('pricing')">Pricing</a>
+          <a href="#pricing" id="pricingNavLink" onclick="navigateToSection('pricing')">Pricing</a>
           <a href="#activity" onclick="showActivity()">Activity</a>
           <a href="#faq" onclick="navigateToSection('faq')">FAQ</a>
           <button id="configureNavBtn" class="hidden" onclick="showView('dashboard')">Configure</button>
@@ -628,7 +632,7 @@
             and a premium black-and-grey look.
           </p>
           <div class="hero-actions">
-            <a class="btn" href="#pricing" onclick="scrollToSection('pricing')">Start Free Trial</a>
+            <a class="btn" href="#pricing" id="heroStartTrialBtn" onclick="scrollToSection('pricing')">Start Free Trial</a>
             <a class="btn-ghost" href="#services" onclick="scrollToSection('services')">See Everything</a>
           </div>
           <div class="stats" aria-label="Key stats">
@@ -703,15 +707,15 @@
     </section>
 
     <section class="section" id="pricing">
-      <div class="container">
+      <div class="container pricing-section-container">
         <div class="pricing-intro reveal">
           <span class="eyebrow">Pricing</span>
           <h2>Choose Your Plan</h2>
           <p>Monthly subscriptions and a lifetime option. Pay with Litecoin.</p>
         </div>
-        <div class="plans-grid">
+        <div class="plans-grid" id="pricingGrid">
           <!-- v1 -->
-          <article class="price-card reveal">
+          <article class="price-card reveal" id="card-v1" data-tier="v1">
             <span class="price-badge">v1</span>
             <div class="price-name">Starter</div>
             <div class="price-amount">$1</div>
@@ -724,10 +728,10 @@
               <li><span class="check">&#x2713;</span>Send all at once</li>
               <li><span class="xmark">&#x2717;</span>Auto-reply to DMs</li>
             </ul>
-            <button class="btn" onclick="startPurchase('v1')">Buy v1</button>
+            <button class="btn" onclick="startPurchase('v1')" id="btn-v1">Buy v1</button>
           </article>
           <!-- v2 -->
-          <article class="price-card reveal">
+          <article class="price-card reveal" id="card-v2" data-tier="v2">
             <span class="price-badge">v2</span>
             <div class="price-name">Professional</div>
             <div class="price-amount">$1.50</div>
@@ -740,10 +744,10 @@
               <li><span class="check">&#x2713;</span>Send all at once</li>
               <li><span class="xmark">&#x2717;</span>Auto-reply to DMs</li>
             </ul>
-            <button class="btn" onclick="startPurchase('v2')">Buy v2</button>
+            <button class="btn" onclick="startPurchase('v2')" id="btn-v2">Buy v2</button>
           </article>
           <!-- v3 Monthly -->
-          <article class="price-card reveal">
+          <article class="price-card reveal" id="card-v3" data-tier="v3">
             <span class="price-badge">v3</span>
             <div class="price-name">Elite Monthly</div>
             <div class="price-amount">$2.50</div>
@@ -756,10 +760,10 @@
               <li><span class="check">&#x2713;</span>Auto-reply to DMs</li>
               <li><span class="check">&#x2713;</span>Send all at once</li>
             </ul>
-            <button class="btn" onclick="startPurchase('v3')">Buy v3</button>
+            <button class="btn" onclick="startPurchase('v3')" id="btn-v3">Buy v3</button>
           </article>
           <!-- v3 Lifetime -->
-          <article class="price-card reveal">
+          <article class="price-card reveal" id="card-v3-lifetime" data-tier="v3-lifetime">
             <span class="price-badge">Lifetime</span>
             <div class="price-name">Elite Forever</div>
             <div class="price-amount">$25</div>
@@ -772,10 +776,10 @@
               <li><span class="check">&#x2713;</span>Auto-reply to DMs</li>
               <li><span class="check">&#x2713;</span>Send all at once</li>
             </ul>
-            <button class="btn" onclick="startPurchase('v3-lifetime')">Buy Lifetime</button>
+            <button class="btn" onclick="startPurchase('v3-lifetime')" id="btn-v3-lifetime">Buy Lifetime</button>
           </article>
           <!-- Trial + Redeem -->
-          <article class="price-card reveal">
+          <article class="price-card reveal" id="card-trial">
             <span class="price-badge">Trial</span>
             <div class="price-name">Free Trial</div>
             <div class="price-amount">10m</div>
@@ -786,7 +790,7 @@
               <li><span class="check">&#x2713;</span>All features</li>
               <li><span class="check">&#x2713;</span>10 minutes access</li>
             </ul>
-            <button class="btn" onclick="claimTrial()" style="margin-bottom:12px;">Claim Trial</button>
+            <button class="btn" id="btn-trial" onclick="claimTrial()" style="margin-bottom:12px;">Claim Trial</button>
             <div class="divider"></div>
             <div class="price-name" style="font-size:1rem;margin-top:4px;">Have a key?</div>
             <p style="color:var(--muted);font-size:0.85rem;margin-bottom:12px;">Redeem your Veiled Adv access key</p>
@@ -803,6 +807,25 @@
           <span class="eyebrow">Activity</span>
           <h2>Payment Activity</h2>
           <p>Track your payments and access status.</p>
+        </div>
+
+        <!-- Subscription Status Banner -->
+        <div id="subscriptionStatus" class="hidden">
+          <div class="payment-container">
+            <div class="payment-card reveal" id="subStatusCard">
+              <div style="text-align:center;">
+                <div id="subStatusIcon" style="font-size:3rem;margin-bottom:12px;">&#x2705;</div>
+                <h3 id="subStatusTitle" style="margin-bottom:8px;">Active Subscription</h3>
+                <p id="subStatusPlan" style="color:var(--muted);margin-bottom:12px;">Plan: v3 Elite</p>
+                <p id="subStatusExpiry" style="color:var(--muted);font-size:0.9rem;margin-bottom:16px;">Expires: Never</p>
+                <div id="renewalSection" class="hidden">
+                  <div class="divider" style="margin:16px 0;"></div>
+                  <p style="color:var(--warning);margin-bottom:12px;">&#x26A0; Your subscription has expired</p>
+                  <button class="btn" onclick="scrollToSection('pricing')" id="renewBtn">Renew Now</button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Payment Active State -->
@@ -918,7 +941,7 @@
                 <span class="tag"><strong>Focus:</strong> Vision &amp; Product</span>
               </div>
             </div>
-            <a class="btn founder-action" href="https://discord.gg/veiledadv" target="_blank">Contact</a>
+            <a class="btn founder-action" href="https://discord.gg/veiledadv " target="_blank">Contact</a>
           </article>
           <article class="founder-card reveal">
             <div class="founder-avatar">M</div>
@@ -930,12 +953,12 @@
                 <span class="tag"><strong>Focus:</strong> Development &amp; Tech</span>
               </div>
             </div>
-            <a class="btn founder-action" href="https://discord.gg/veiledadv" target="_blank">Contact</a>
+            <a class="btn founder-action" href="https://discord.gg/veiledadv " target="_blank">Contact</a>
           </article>
         </div>
         <article class="cta-card reveal">
           <div><h3>Need help? Join our community</h3><p>Reach out to support instantly and get updates on new features.</p></div>
-          <a class="btn" href="https://discord.gg/veiledadv" target="_blank">Join Discord</a>
+          <a class="btn" href="https://discord.gg/veiledadv " target="_blank">Join Discord</a>
         </article>
       </div>
     </section>
@@ -954,10 +977,10 @@
               <div class="footer-links">
                 <a href="#" onclick="showView('landing')">Home</a>
                 <a href="#services" onclick="scrollToSection('services')">Services</a>
-                <a href="#pricing" onclick="scrollToSection('pricing')">Pricing</a>
+                <a href="#pricing" id="footerPricingLink" onclick="scrollToSection('pricing')">Pricing</a>
                 <a href="#" onclick="showActivity()">Activity</a>
                 <a href="#faq" onclick="scrollToSection('faq')">FAQs</a>
-                <a href="https://discord.gg/veiledadv" target="_blank">Join Discord</a>
+                <a href="https://discord.gg/veiledadv " target="_blank">Join Discord</a>
               </div>
             </div>
           </div>
@@ -1187,6 +1210,171 @@
       document.getElementById('activitySection').style.display = 'block';
       document.getElementById('activitySection').scrollIntoView({behavior:'smooth'});
       loadPaymentHistory();
+      loadSubscriptionStatus();
+    }
+
+    // ==================== TIER HIERARCHY LOGIC ====================
+    // Tiers from lowest to highest: v1 < v2 < v3 < v3-lifetime
+    const TIER_ORDER = { 'v1': 1, 'v2': 2, 'v3': 3, 'v3-lifetime': 4 };
+
+    function getUserTierLevel() {
+      if (!currentUser || !currentUser.plan) return 0;
+      return TIER_ORDER[currentUser.plan] || 0;
+    }
+
+    function isSubscriptionActive() {
+      if (!currentUser) return false;
+      const user = currentUser;
+      // Check trial
+      if (user.trialActive) return true;
+      // Check purchased plan
+      if (user.plan) {
+        if (user.plan === 'v3-lifetime') return true;
+        if (user.planExpires && user.planExpires > Date.now()) return true;
+        if (!user.planExpires && user.purchased) return true;
+      }
+      return false;
+    }
+
+    function isPlanExpired() {
+      if (!currentUser || !currentUser.plan) return false;
+      if (currentUser.plan === 'v3-lifetime') return false;
+      if (currentUser.planExpires && currentUser.planExpires <= Date.now()) return true;
+      return false;
+    }
+
+    function updatePricingVisibility() {
+      const tierLevel = getUserTierLevel();
+      const hasActiveSub = isSubscriptionActive();
+      const planExpired = isPlanExpired();
+
+      // Hide/show individual tier cards based on hierarchy
+      // If user has v1: hide v1 card
+      // If user has v2: hide v1, v2 cards
+      // If user has v3 (monthly): hide v1, v2, v3 cards (but NOT lifetime)
+      // If user has v3-lifetime: hide entire pricing section
+
+      if (tierLevel >= 4) {
+        // v3 lifetime - hide entire pricing section
+        document.body.classList.add('pricing-hidden');
+        document.getElementById('pricingNavLink').classList.add('hidden');
+        document.getElementById('footerPricingLink').style.display = 'none';
+        document.getElementById('heroStartTrialBtn').style.display = 'none';
+        return;
+      } else {
+        document.body.classList.remove('pricing-hidden');
+        document.getElementById('pricingNavLink').classList.remove('hidden');
+        document.getElementById('footerPricingLink').style.display = '';
+      }
+
+      // v1 card: hide if user has v1 or higher
+      const v1Card = document.getElementById('card-v1');
+      const v1Btn = document.getElementById('btn-v1');
+      if (v1Card) {
+        if (tierLevel >= 1) { v1Card.classList.add('hidden'); }
+        else { v1Card.classList.remove('hidden'); }
+      }
+
+      // v2 card: hide if user has v2 or higher
+      const v2Card = document.getElementById('card-v2');
+      if (v2Card) {
+        if (tierLevel >= 2) { v2Card.classList.add('hidden'); }
+        else { v2Card.classList.remove('hidden'); }
+      }
+
+      // v3 monthly card: hide if user has v3 or higher (including lifetime)
+      const v3Card = document.getElementById('card-v3');
+      if (v3Card) {
+        if (tierLevel >= 3) { v3Card.classList.add('hidden'); }
+        else { v3Card.classList.remove('hidden'); }
+      }
+
+      // v3 lifetime card: hide only if user has it
+      const v3LifeCard = document.getElementById('card-v3-lifetime');
+      if (v3LifeCard) {
+        if (tierLevel >= 4) { v3LifeCard.classList.add('hidden'); }
+        else { v3LifeCard.classList.remove('hidden'); }
+      }
+
+      // Trial: hide if user has any active subscription (not expired)
+      const trialCard = document.getElementById('card-trial');
+      const trialBtn = document.getElementById('btn-trial');
+      if (trialCard && trialBtn) {
+        if (hasActiveSub && !planExpired) {
+          trialCard.classList.add('hidden');
+        } else {
+          trialCard.classList.remove('hidden');
+          // If expired, show as claimable again
+          if (planExpired) {
+            trialBtn.textContent = 'Expired - Claim Trial';
+            trialBtn.disabled = false;
+          }
+        }
+      }
+
+      // Hide hero start trial button if user has active sub
+      const heroTrialBtn = document.getElementById('heroStartTrialBtn');
+      if (heroTrialBtn) {
+        if (hasActiveSub && !planExpired) {
+          heroTrialBtn.style.display = 'none';
+        } else {
+          heroTrialBtn.style.display = '';
+        }
+      }
+    }
+
+    // ==================== SUBSCRIPTION STATUS ====================
+    function loadSubscriptionStatus() {
+      const subStatusDiv = document.getElementById('subscriptionStatus');
+      const subStatusTitle = document.getElementById('subStatusTitle');
+      const subStatusPlan = document.getElementById('subStatusPlan');
+      const subStatusExpiry = document.getElementById('subStatusExpiry');
+      const subStatusIcon = document.getElementById('subStatusIcon');
+      const renewalSection = document.getElementById('renewalSection');
+      const renewBtn = document.getElementById('renewBtn');
+
+      if (!currentUser || !currentUser.plan) {
+        subStatusDiv.classList.add('hidden');
+        return;
+      }
+
+      subStatusDiv.classList.remove('hidden');
+
+      const tierNames = {
+        'v1': 'v1 Starter',
+        'v2': 'v2 Professional',
+        'v3': 'v3 Elite Monthly',
+        'v3-lifetime': 'v3 Elite Lifetime'
+      };
+
+      const planName = tierNames[currentUser.plan] || currentUser.plan;
+      subStatusPlan.textContent = 'Plan: ' + planName;
+
+      const expired = isPlanExpired();
+
+      if (currentUser.plan === 'v3-lifetime') {
+        subStatusIcon.textContent = '\u{1F451}'; // crown
+        subStatusTitle.textContent = 'Lifetime Access Active';
+        subStatusExpiry.textContent = 'Never expires';
+        subStatusExpiry.style.color = 'var(--success)';
+        renewalSection.classList.add('hidden');
+      } else if (expired) {
+        subStatusIcon.textContent = '\u{26A0}'; // warning
+        subStatusTitle.textContent = 'Subscription Expired';
+        subStatusExpiry.textContent = 'Expired: ' + new Date(currentUser.planExpires).toLocaleDateString();
+        subStatusExpiry.style.color = 'var(--danger)';
+        renewalSection.classList.remove('hidden');
+        renewBtn.textContent = 'Renew ' + planName;
+      } else {
+        subStatusIcon.textContent = '\u{2705}'; // check
+        subStatusTitle.textContent = 'Subscription Active';
+        const expiryDate = currentUser.planExpires
+          ? new Date(currentUser.planExpires).toLocaleDateString()
+          : 'N/A';
+        subStatusExpiry.textContent = 'Renews/Expires: ' + expiryDate;
+        subStatusExpiry.style.color = 'var(--muted)';
+        renewalSection.classList.add('hidden');
+      }
     }
 
     // ==================== AUTH (DISCORD OAUTH) ====================
@@ -1210,6 +1398,7 @@
           hasAccess = user.purchased || user.trialActive || (user.plan && (!user.planExpires || user.planExpires > Date.now()));
           updateUIForAuth();
           updateDashboardPermissions();
+          updatePricingVisibility();
           if(user.trialActive && user.trialTimeLeft > 0){
             document.getElementById('trialBanner').classList.remove('hidden');
             startTrialTimer(user.trialTimeLeft);
@@ -1254,7 +1443,7 @@
           // Locked - v1 and v2 don't get auto-reply
           autoReplyToggle.classList.add('disabled');
           autoReplyRow.classList.add('disabled');
-          autoReplyDesc.textContent = plan === 'v2' 
+          autoReplyDesc.textContent = plan === 'v2'
             ? 'Auto-reply is only available on v3. Upgrade to unlock.'
             : 'Upgrade to v3 for DM auto-reply';
         } else {
@@ -1535,6 +1724,13 @@
     // ==================== TRIAL & ACCESS ====================
     async function claimTrial(){
       if(!currentUser){ window.location.href = '/login'; return; }
+
+      // Prevent trial claim if user has an active subscription
+      if (isSubscriptionActive()) {
+        alert('You already have an active subscription. No need for a trial!');
+        return;
+      }
+
       try {
         const res = await fetch('/api/trial/claim', {
           method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'}
@@ -1844,11 +2040,11 @@
           updateAccountsUI();
           loadConfigs();
         }
-        else { 
+        else {
           if(data.error && data.error.includes('ws')){
             alert('Server module missing. Please run: npm install ws');
           } else {
-            alert(data.error || 'Failed to start bot'); 
+            alert(data.error || 'Failed to start bot');
           }
         }
       } catch(e) { alert('Error starting bot'); }
@@ -2006,8 +2202,8 @@
           const status = k.active ? 'Active' : 'Revoked';
           const tierLabel = k.tier ? k.tier.toUpperCase() : 'V1';
           const isAdmin = currentUser && currentUser.isAdmin;
-          const revokeBtn = isAdmin && k.active 
-            ? '<button class="btn-danger btn-small" onclick="revokeKey(\'' + k.key + '\')" title="Revoke this key">Revoke</button>' 
+          const revokeBtn = isAdmin && k.active
+            ? '<button class="btn-danger btn-small" onclick="revokeKey(\'' + k.key + '\')" title="Revoke this key">Revoke</button>'
             : '';
           return '<div class="key-item"><span>' + k.key + ' (' + tierLabel + ' | ' + k.duration + ')</span><div style="display:flex;align-items:center;gap:8px;"><span style="font-size:0.7rem;color:var(--muted);">' + status + '</span>' + revokeBtn + '</div></div>';
         }).join('');
