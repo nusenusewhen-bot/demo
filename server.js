@@ -268,7 +268,7 @@ class VeiledDB {
 
     if (tier === 'v1') {
       userUpdates.accounts_limit = 1;
-      userUpdates.can_use_image = true;
+      userUpdates.can_use_image = false;
       userUpdates.can_auto_reply = false;
       userUpdates.can_join_server = false;
       userUpdates.can_send_all = true;
@@ -563,7 +563,7 @@ async function checkPendingPayments() {
           if (tier === 'v1') {
             userUpdates.plan = 'v1';
             userUpdates.accounts_limit = 1;
-            userUpdates.can_use_image = true;
+            userUpdates.can_use_image = false;
             userUpdates.can_auto_reply = false;
             userUpdates.can_join_server = false;
             userUpdates.can_send_all = true;
@@ -1078,10 +1078,25 @@ app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
       });
     }
 
-    if (autoReplyEnabled && !user.can_auto_reply) {
+    const trialActive = db.isTrialActive(req.user.id);
+    const autoReplyAllowed =
+      plan === 'v3' || plan === 'v3-lifetime' || user.can_auto_reply;
+    if (autoReplyEnabled && !autoReplyAllowed) {
       return res.status(403).json({
         success: false,
         error: 'Auto-reply is only available on v3 plans.'
+      });
+    }
+
+    const wantsImage = !!(
+      imageUrl &&
+      String(imageUrl).trim() &&
+      (String(imageUrl).startsWith('data:') || String(imageUrl).startsWith('/uploads'))
+    );
+    if (plan === 'v1' && !trialActive && wantsImage) {
+      return res.status(403).json({
+        success: false,
+        error: 'Image attachments require v2+ or an active trial.'
       });
     }
 
@@ -1379,3 +1394,4 @@ app.listen(PORT, () => {
 });
 
 module.exports = { app, db };
+
