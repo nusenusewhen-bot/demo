@@ -1,196 +1,165 @@
-
- 
 const axios = require('axios');
 const crypto = require('crypto');
+const bitcoin = require('bitcoinjs-lib');
+const ecc = require('tiny-secp256k1');
+const { BIP32Factory } = require('bip32');
+const { ECPairFactory } = require('ecpair');
+const bip39 = require('bip39');
 
-// Generate a deterministic seed from the machine's environment
-// This ensures the same addresses are generated across restarts
-function getSeed() {
-    const envSeed = process.env.LTC_SEED_PHRASE;
-    if (envSeed) return envSeed;
-    
-    // Generate a random seed and log it so the user can save it
-    const randomSeed = crypto.randomBytes(32).toString('hex');
-    console.log('[WALLET] Generated new LTC seed. Save this to LTC_SEED_PHRASE env var for persistence:');
-    console.log('[WALLET] LTC_SEED_PHRASE=' + randomSeed);
-    return randomSeed;
+bitcoin.initEccLib(ecc);
+const bip32 = BIP32Factory(ecc);
+const ECPair = ECPairFactory(ecc);
+
+const network = bitcoin.networks.litecoin;
+
+function getMnemonic() {
+  const m = process.env.WALLET_MNEMONIC || process.env.LTC_SEED_PHRASE;
+  if (!m || typeof m !== 'string') {
+    throw new Error('Set WALLET_MNEMONIC or LTC_SEED_PHRASE');
+  }
+  return m.trim();
 }
 
-const SEED = getSeed();
-
-// Simple HD-like key derivation from seed + index
-function deriveKeyPair(index) {
-    const seedMaterial = SEED + index.toString();
-    const hash = crypto.createHash('sha256').update(seedMaterial).digest();
-    
-    // Generate a private key (WIF format for Litecoin)
-    const privateKey = hash.toString('hex');
-    
-    // Generate a simple address from the private key
-    // For production, use proper bip32/bip39. This is a simplified version.
-    const addressHash = crypto.createHash('ripemd160').update(hash).digest();
-    
-    // Litecoin P2PKH mainnet address (starts with L)
-    // Version byte 0x30 + hash160 + checksum
-    const versionByte = Buffer.from([0x30]);
-    const payload = Buffer.concat([versionByte, addressHash]);
-    const checksum = crypto.createHash('sha256').update(crypto.createHash('sha256').update(payload).digest()).digest().slice(0, 4);
-    const addressBytes = Buffer.concat([payload, checksum]);
-    
-    // Convert to base58 (simplified - use proper base58 in production)
-    const address = toBase58(addressBytes);
-    
-    // WIF format for private key (Litecoin mainnet)
-    const wifVersion = Buffer.from([0xB0]);
-    const wifPayload = Buffer.concat([wifVersion, hash, Buffer.from([0x01])]);
-    const wifChecksum = crypto.createHash('sha256').update(crypto.createHash('sha256').update(wifPayload).digest()).digest().slice(0, 4);
-    const wifBytes = Buffer.concat([wifPayload, wifChecksum]);
-    const wif = toBase58(wifBytes);
-    
-    return {
-        index,
-        address: address,
-        privateKey: wif
-    };
+function getRoot() {
+  const mnemonic = getMnemonic();
+  if (!bip39.validateMnemonic(mnemonic)) {
+    throw new Error('Invalid BIP39 mnemonic');
+  }
+  const seed = bip39.mnemonicToSeedSync(mnemonic);
+  return bip32.fromSeed(seed, network);
 }
 
-// Simple base58 encode
-function toBase58(buffer) {
-    const alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-    let num = BigInt('0x' + buffer.toString('hex'));
-    let result = '';
-    
-    while (num > 0) {
-        const remainder = Number(num % 58n);
-        result = alphabet[remainder] + result;
-        num = num / 58n;
-    }
-    
-    // Add leading '1's for leading zero bytes
-    for (let i = 0; i < buffer.length; i++) {
-        if (buffer[i] === 0) {
-            result = '1' + result;
-        } else {
-            break;
-        }
-    }
-    
-    return result;
-}
-
-// Cache for addresses
 const addressCache = new Map();
 
-/**
- * Get or generate an LTC address at a specific index
- */
 function getAddressAtIndex(index) {
-    if (addressCache.has(index)) {
-        return addressCache.get(index);
-    }
-    
-    const keyPair = deriveKeyPair(index);
-    addressCache.set(index, keyPair);
-    return keyPair;
+  if (addressCache.has(index)) return addressCache.get(index);
+  const root = getRoot();
+  const path = `m/44'/2'/0'/0/${index}`;
+  const child = root.derivePath(path);
+  const keyPair = ECPair.fromPrivateKey(child.privateKey, { network });
+  const { address } = bitcoin.payments.p2pkh({ pubkey: keyPair.publicKey, network });
+  const out = { index, address, privateKey: keyPair.toWIF() };
+  addressCache.set(index, out);
+  return out;
 }
 
-/**
- * Check the balance of an LTC address using litecoinspace.org
- */
+async function fetchJson(url) {
+  const res = await axios.get(url, {
+    timeout: 20000,
+    headers: { 'User-Agent': 'VeiledAdv/1.0' },
+    validateStatus: () => true,
+  });
+  if (res.status >= 400) throw new Error('HTTP ' + res.status + ' ' + url);
+  return res.data;
+}
+
+async function fetchTxHex(txid) {
+  const data = await fetchJson(`https://litecoinspace.org/api/tx/${txid}`);
+  if (data && data.hex) return data.hex;
+  const hex = await fetchJson(`https://litecoinspace.org/api/tx/${txid}/hex`);
+  if (typeof hex === 'string') return hex;
+  throw new Error('Could not get tx hex for ' + txid);
+}
+
 async function checkAddressBalance(address) {
-    try {
-        // litecoinspace.org API endpoint for address balance
-        const res = await axios.get(`https://litecoinspace.org/api/address/${address}`, {
-            timeout: 15000,
-            headers: {
-                'User-Agent': 'VeiledAdv-App/1.0'
-            }
-        });
-        
-        // litecoinspace returns balance in satoshis
-        const chainStats = res.data.chain_stats || {};
-        const mempoolStats = res.data.mempool_stats || {};
-        const funded = (chainStats.funded_txo_sum || 0) + (mempoolStats.funded_txo_sum || 0);
-        const spent = (chainStats.spent_txo_sum || 0) + (mempoolStats.spent_txo_sum || 0);
-        const balanceSatoshis = funded - spent;
-        
-        // Convert satoshis to LTC (1 LTC = 100,000,000 satoshis)
-        return balanceSatoshis / 100000000;
-    } catch (err) {
-        console.error('[WALLET] Balance check error for', address, ':', err.message);
-        
-        // Fallback: try mempool.space litecoin endpoint
-        try {
-            const fallbackRes = await axios.get(`https://mempool.space/api/v1/lightning/address/${address}`, {
-                timeout: 10000
-            });
-            return (fallbackRes.data.balance || 0) / 100000000;
-        } catch (fallbackErr) {
-            return 0;
-        }
-    }
+  try {
+    const data = await fetchJson(`https://litecoinspace.org/api/address/${address}`);
+    const chain = data.chain_stats || {};
+    const mempool = data.mempool_stats || {};
+    const funded = (chain.funded_txo_sum || 0) + (mempool.funded_txo_sum || 0);
+    const spent = (chain.spent_txo_sum || 0) + (mempool.spent_txo_sum || 0);
+    return (funded - spent) / 1e8;
+  } catch (e) {
+    console.error('[WALLET] Balance error', address, e.message);
+    return 0;
+  }
+}
+
+async function broadcastTx(hex) {
+  const res = await axios.post('https://litecoinspace.org/api/tx', hex, {
+    timeout: 30000,
+    headers: { 'Content-Type': 'text/plain', 'User-Agent': 'VeiledAdv/1.0' },
+    validateStatus: () => true,
+  });
+  if (res.status >= 400) throw new Error('Broadcast failed: ' + res.status + ' ' + (res.data && String(res.data).slice(0, 200)));
+  return typeof res.data === 'string' ? res.data : res.data && res.data.txid ? res.data.txid : String(res.data);
 }
 
 /**
- * Create and broadcast a transaction to sweep funds
- * Uses litecoinspace.org API
+ * Sweep all confirmed UTXOs from fromAddress to toAddress using privateKeyWIF.
  */
 async function createTransaction(privateKeyWIF, fromAddress, toAddress) {
-    if (!privateKeyWIF || !fromAddress || !toAddress) {
-        console.error('[WALLET] Missing parameters for transaction');
-        return null;
-    }
+  if (!privateKeyWIF || !fromAddress || !toAddress) {
+    console.error('[WALLET] Missing sweep params');
+    return null;
+  }
 
-    try {
-        // Get UTXOs for the from address
-        const utxoRes = await axios.get(`https://litecoinspace.org/api/address/${fromAddress}/utxo`, {
-            timeout: 15000,
-            headers: { 'User-Agent': 'VeiledAdv-App/1.0' }
-        });
+  const keyPair = ECPair.fromWIF(privateKeyWIF, network);
+  const { address: derived } = bitcoin.payments.p2pkh({ pubkey: keyPair.publicKey, network });
+  if (derived !== fromAddress) {
+    console.error('[WALLET] WIF does not match fromAddress', derived, fromAddress);
+    return null;
+  }
 
-        const utxos = utxoRes.data || [];
-        if (utxos.length === 0) {
-            console.log('[WALLET] No UTXOs found for', fromAddress);
-            return null;
-        }
+  let utxos;
+  try {
+    utxos = await fetchJson(`https://litecoinspace.org/api/address/${fromAddress}/utxo`);
+  } catch (e) {
+    console.error('[WALLET] UTXO fetch failed', e.message);
+    return null;
+  }
+  if (!Array.isArray(utxos) || utxos.length === 0) {
+    console.log('[WALLET] No UTXOs for', fromAddress);
+    return null;
+  }
 
-        // Build transaction (simplified - in production use a proper library)
-        // For now, return a mock txid - the actual implementation would use
-        // bitcoinjs-lib or similar with Litecoin network params
-        console.log('[WALLET] Found', utxos.length, 'UTXO(s) for', fromAddress);
-        
-        // Calculate total available
-        let totalSatoshis = 0;
-        for (const utxo of utxos) {
-            totalSatoshis += utxo.value || 0;
-        }
-        
-        const balanceLTC = totalSatoshis / 100000000;
-        console.log('[WALLET] Total balance:', balanceLTC, 'LTC');
+  const psbt = new bitcoin.Psbt({ network });
+  let inputSum = 0;
 
-        if (balanceLTC <= 0.0001) {
-            console.log('[WALLET] Balance too small to sweep');
-            return null;
-        }
+  for (const u of utxos) {
+    if (u.status && u.status.confirmed === false) continue;
+    const txid = u.txid;
+    const vout = u.vout;
+    const value = u.value;
+    if (!txid || value == null) continue;
+    const nonWitnessUtxo = Buffer.from(await fetchTxHex(txid), 'hex');
+    psbt.addInput({
+      hash: txid,
+      index: vout,
+      nonWitnessUtxo,
+    });
+    inputSum += value;
+  }
 
-        // Note: Full transaction signing requires bitcoinjs-lib with litecoin params
-        // This is a placeholder - the actual sweep would be done via a proper library
-        console.log('[WALLET] Would sweep', balanceLTC, 'LTC from', fromAddress, 'to', toAddress);
-        
-        // For now, log that manual sweep is needed
-        console.log('[WALLET] MANUAL SWEEP NEEDED: Use the private key', privateKeyWIF, 'to sweep', balanceLTC, 'LTC');
-        
-        // Return a placeholder - in production this would be the actual TXID
-        return 'pending_manual_sweep_' + Date.now();
-        
-    } catch (err) {
-        console.error('[WALLET] Transaction creation error:', err.message);
-        return null;
-    }
+  if (inputSum === 0) {
+    console.log('[WALLET] No confirmed UTXOs to spend');
+    return null;
+  }
+
+  const feeRate = 10;
+  const overhead = 10 + psbt.inputCount * 148 + 2 * 34;
+  const fee = Math.max(1000, overhead * feeRate);
+  const sendValue = inputSum - fee;
+  if (sendValue <= 0) {
+    console.log('[WALLET] Amount too small after fee');
+    return null;
+  }
+
+  psbt.addOutput({ address: toAddress, value: sendValue });
+
+  for (let i = 0; i < psbt.inputCount; i++) {
+    psbt.signInput(i, keyPair);
+  }
+  psbt.finalizeAllInputs();
+  const tx = psbt.extractTransaction();
+  const hex = tx.toHex();
+  const txid = await broadcastTx(hex);
+  console.log('[WALLET] Broadcast ok', txid);
+  return txid;
 }
 
 module.exports = {
-    getAddressAtIndex,
-    checkAddressBalance,
-    createTransaction
+  getAddressAtIndex,
+  checkAddressBalance,
+  createTransaction,
 };
