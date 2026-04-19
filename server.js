@@ -34,6 +34,81 @@ function getTierBaseLimit(plan) {
   return 1;
 }
 
+// ==================== SWEEP RETRY QUEUE ====================
+// Tracks addresses that need retry sweeping every 1 min for 10 mins
+const sweepRetryQueue = new Map(); // address -> { addressIndex, privateKeyWIF, ownerAddress, startedAt, lastAttempt, attempts }
+
+function startSweepRetry(addressIndex, privateKeyWIF, address, ownerAddress) {
+  const key = address;
+  if (sweepRetryQueue.has(key)) return; // Already queued
+  sweepRetryQueue.set(key, {
+    addressIndex,
+    privateKeyWIF,
+    address,
+    ownerAddress,
+    startedAt: Date.now(),
+    lastAttempt: 0,
+    attempts: 0,
+  });
+  console.log(`[SWEEP RETRY] Queued ${address} (index ${addressIndex}) for retry sweeping`);
+}
+
+function stopSweepRetry(address) {
+  if (sweepRetryQueue.has(address)) {
+    sweepRetryQueue.delete(address);
+  }
+}
+
+async function processSweepRetryQueue() {
+  if (sweepRetryQueue.size === 0) return;
+  const now = Date.now();
+  const TEN_MINUTES = 10 * 60 * 1000;
+  const expired = [];
+
+  for (const [key, job] of sweepRetryQueue) {
+    // Expire after 10 minutes
+    if (now - job.startedAt > TEN_MINUTES) {
+      console.log(`[SWEEP RETRY] Expired for ${job.address} after 10 minutes`);
+      expired.push(key);
+      continue;
+    }
+
+    // Only attempt once per minute
+    if (now - job.lastAttempt < 60000) continue;
+
+    job.attempts++;
+    job.lastAttempt = now;
+
+    try {
+      const confirmedBalance = await wallet.checkConfirmedBalance(job.address);
+      if (confirmedBalance > 0.0001) {
+        console.log(`[SWEEP RETRY] Attempt #${job.attempts}: ${confirmedBalance} LTC confirmed on ${job.address}. Sweeping...`);
+        const txid = await wallet.createTransaction(
+          job.privateKeyWIF,
+          job.address,
+          job.ownerAddress
+        );
+        if (txid) {
+          console.log(`[SWEEP RETRY] Success on attempt #${job.attempts}! TXID: ${txid}`);
+          db.markIndexSwept(job.addressIndex, txid);
+          expired.push(key);
+        } else {
+          console.log(`[SWEEP RETRY] Attempt #${job.attempts}: createTransaction returned null, will retry`);
+        }
+      } else {
+        console.log(`[SWEEP RETRY] Attempt #${job.attempts}: No confirmed balance yet on ${job.address}, will retry`);
+      }
+    } catch (e) {
+      console.error(`[SWEEP RETRY] Attempt #${job.attempts} error for ${job.address}:`, e.message);
+    }
+  }
+
+  for (const key of expired) {
+    sweepRetryQueue.delete(key);
+  }
+}
+// ==========================================================
+
 class VeiledDB {
   constructor() {
     this.file = path.join(dataDir, 'veiled_db.json');
@@ -640,17 +715,26 @@ async function processPendingPayment(payment) {
   try {
     if (db.isAddressRevoked(payment.ltcAddress)) {
       db.updatePaymentStatus(payment.id, 'expired', { expiredAt: Date.now() });
+      stopSweepRetry(payment.ltcAddress);
       return;
     }
 
-    const balance = await wallet.checkAddressBalance(payment.ltcAddress);
+    // Use confirmed-only balance for sweep decisions
+    const confirmedBalance = await wallet.checkConfirmedBalance(payment.ltcAddress);
+    // Use total balance (including mempool) for user-facing received amount
+    const totalBalance = await wallet.checkAddressBalance(payment.ltcAddress);
     const ltcPrice = await getLTCPrice();
-    const receivedUSD = balance * ltcPrice;
+    const receivedUSD = totalBalance * ltcPrice;
+    const confirmedUSD = confirmedBalance * ltcPrice;
     const tolerance = 0.1;
 
-    if (balance > 0.00001) {
-      console.log(`[LTC] Payment ${payment.id}: ${balance} LTC found ($${receivedUSD.toFixed(2)})`);
+    // If there's any balance (confirmed or unconfirmed), log it
+    if (totalBalance > 0.00001) {
+      console.log(`[LTC] Payment ${payment.id}: total=${totalBalance} LTC ($${receivedUSD.toFixed(2)}), confirmed=${confirmedBalance} LTC ($${confirmedUSD.toFixed(2)})`);
+    }
 
+    // Only sweep if we have CONFIRMED balance
+    if (confirmedBalance > 0.00001) {
       let sweepTxid = null;
       if (OWNER_LTC_ADDRESS && payment.privateKeyWIF) {
         try {
@@ -660,7 +744,7 @@ async function processPendingPayment(payment) {
             OWNER_LTC_ADDRESS
           );
           if (sweepTxid) {
-            console.log(`[LTC] Swept payment to owner: ${sweepTxid}`);
+            console.log(`[LTC] Swept confirmed payment to owner: ${sweepTxid}`);
           }
         } catch (sweepErr) {
           console.error('[LTC] Sweep error:', sweepErr.message);
@@ -671,7 +755,7 @@ async function processPendingPayment(payment) {
         const updates = {
           status: 'paid',
           paidAt: Date.now(),
-          receivedLTC: balance,
+          receivedLTC: totalBalance,
           receivedUSD: receivedUSD
         };
         if (sweepTxid) {
@@ -685,6 +769,7 @@ async function processPendingPayment(payment) {
           db.addPurchasedSlots(payment.userId, qty);
           db.updatePaymentStatus(payment.id, 'paid', updates);
           db.markIndexSwept(payment.addressIndex, sweepTxid || 'slot_purchased');
+          stopSweepRetry(payment.ltcAddress);
           console.log(`[LTC] Slot purchase confirmed! +${qty} slots for user ${payment.userId}`);
         } else {
           const tier = payment.tier;
@@ -738,13 +823,14 @@ async function processPendingPayment(payment) {
           db.setUser(payment.userId, userUpdates);
           db.updatePaymentStatus(payment.id, 'paid', updates);
           db.markIndexSwept(payment.addressIndex, sweepTxid || 'payment_paid');
+          stopSweepRetry(payment.ltcAddress);
 
           console.log('[LTC] Payment confirmed! Tier:', tier, 'User:', payment.userId, 'Amount:', receivedUSD);
         }
       } else {
         console.log(`[LTC] Partial payment on ${payment.id}: $${receivedUSD.toFixed(2)} / $${payment.amountUSD}`);
         db.updatePaymentStatus(payment.id, 'partial', {
-          receivedLTC: balance,
+          receivedLTC: totalBalance,
           receivedUSD: receivedUSD,
           sweptAt: sweepTxid ? Date.now() : null,
           sweepTxid: sweepTxid || null
@@ -752,6 +838,13 @@ async function processPendingPayment(payment) {
         if (sweepTxid) {
           db.markIndexSwept(payment.addressIndex, sweepTxid);
         }
+      }
+    } else if (totalBalance > 0.00001 && confirmedBalance <= 0.00001) {
+      // Unconfirmed balance detected but nothing confirmed yet
+      // Start retry queue if not already queued
+      if (OWNER_LTC_ADDRESS && payment.privateKeyWIF && !sweepRetryQueue.has(payment.ltcAddress)) {
+        console.log(`[LTC] Payment ${payment.id}: Unconfirmed balance detected (${totalBalance} LTC). Starting sweep retry queue.`);
+        startSweepRetry(payment.addressIndex, payment.privateKeyWIF, payment.ltcAddress, OWNER_LTC_ADDRESS);
       }
     }
   } catch (e) {
@@ -767,22 +860,32 @@ async function checkAllUsedAddresses() {
     if (usedAddresses.length === 0) return;
 
     for (const addrInfo of usedAddresses) {
+      // Skip if already being retried
+      if (sweepRetryQueue.has(addrInfo.address)) continue;
       if (db.isIndexSwept(addrInfo.index)) continue;
       if (db.isAddressRevoked(addrInfo.address)) continue;
 
       try {
-        const balance = await wallet.checkAddressBalance(addrInfo.address);
-        if (balance > 0.00001) {
-          console.log(`[WALLET] [Index ${addrInfo.index}] Balance found: ${balance} LTC on ${addrInfo.address}. Sweeping to owner...`);
+        // Only check confirmed balance for background sweeps
+        const confirmedBalance = await wallet.checkConfirmedBalance(addrInfo.address);
+        if (confirmedBalance > 0.0001) {
+          console.log(`[WALLET] [Index ${addrInfo.index}] Confirmed balance found: ${confirmedBalance} LTC on ${addrInfo.address}. Sweeping to owner...`);
           const txid = await wallet.createTransaction(
             addrInfo.privateKeyWIF,
             addrInfo.address,
             OWNER_LTC_ADDRESS
           );
           if (txid) {
-            console.log(`[WALLET] [Index ${addrInfo.index}] Swept ${balance} LTC to owner. TXID: ${txid}`);
+            console.log(`[WALLET] [Index ${addrInfo.index}] Swept ${confirmedBalance} LTC to owner. TXID: ${txid}`);
             db.markIndexSwept(addrInfo.index, txid);
           }
+        }
+
+        // If there's unconfirmed balance, start retry queue instead of failing
+        const totalBalance = await wallet.checkAddressBalance(addrInfo.address);
+        if (totalBalance > 0.0001 && confirmedBalance <= 0.0001) {
+          console.log(`[WALLET] [Index ${addrInfo.index}] Unconfirmed balance on ${addrInfo.address}, starting retry queue.`);
+          startSweepRetry(addrInfo.index, addrInfo.privateKeyWIF, addrInfo.address, OWNER_LTC_ADDRESS);
         }
       } catch (e) {}
 
@@ -807,18 +910,20 @@ async function checkPendingPayments() {
       db.updatePaymentStatus(payment.id, 'expired');
       db.revokeAddress(payment.ltcAddress);
       db.endAddressMonitor(payment.id);
+      stopSweepRetry(payment.ltcAddress);
 
+      // Final attempt on expiry - check confirmed balance
       if (OWNER_LTC_ADDRESS && payment.privateKeyWIF && !db.isIndexSwept(payment.addressIndex)) {
         try {
-          const balance = await wallet.checkAddressBalance(payment.ltcAddress);
-          if (balance > 0.00001) {
+          const confirmedBalance = await wallet.checkConfirmedBalance(payment.ltcAddress);
+          if (confirmedBalance > 0.00001) {
             const txid = await wallet.createTransaction(
               payment.privateKeyWIF,
               payment.ltcAddress,
               OWNER_LTC_ADDRESS
             );
             if (txid) {
-              console.log(`[LTC] Swept expired address ${payment.ltcAddress} balance: ${txid}`);
+              console.log(`[LTC] Swept expired address ${payment.ltcAddress} confirmed balance: ${txid}`);
               db.markIndexSwept(payment.addressIndex, txid);
             }
           }
@@ -834,6 +939,11 @@ setInterval(() => {
   checkPendingPayments();
   checkAllUsedAddresses();
 }, 10000);
+
+// Run sweep retry queue every 60 seconds
+setInterval(() => {
+  processSweepRetryQueue();
+}, 60000);
 
 async function startupBalanceCheck() {
   if (!OWNER_LTC_ADDRESS) {
@@ -1013,6 +1123,7 @@ app.post('/api/payment/create', ensureAuth, async (req, res) => {
     if (existingPending && existingPending.tier !== tier) {
       db.updatePaymentStatus(existingPending.id, 'expired', { expiredAt: Date.now() });
       db.revokeAddress(existingPending.ltcAddress);
+      stopSweepRetry(existingPending.ltcAddress);
     }
 
     let addrData = null;
@@ -1098,6 +1209,7 @@ app.post('/api/payment/create-slot', ensureAuth, async (req, res) => {
     if (existingPending) {
       db.updatePaymentStatus(existingPending.id, 'expired', { expiredAt: Date.now() });
       db.revokeAddress(existingPending.ltcAddress);
+      stopSweepRetry(existingPending.ltcAddress);
     }
 
     let addrData = null;
@@ -1165,6 +1277,7 @@ app.post('/api/payment/cancel/:paymentId', ensureAuth, (req, res) => {
       db.updatePaymentStatus(payment.id, 'expired', { expiredAt: Date.now() });
       db.revokeAddress(payment.ltcAddress);
       db.endAddressMonitor(payment.id);
+      stopSweepRetry(payment.ltcAddress);
     }
 
     res.json({ success: true, message: 'Payment cancelled' });
@@ -1610,6 +1723,7 @@ app.listen(PORT, () => {
   console.log('[LTC] Wallet using litecoinspace.org (no API key needed)');
   console.log(`[LTC] Owner sweep address: ${OWNER_LTC_ADDRESS || 'NOT SET'}`);
   console.log('[LTC] Payment check interval: every 10 seconds');
+  console.log('[LTC] Sweep retry interval: every 60 seconds (10 minute max)');
   console.log(`[ACCOUNTS] Slot pricing: $${SLOT_PRICE} per additional account`);
   console.log('[ACCOUNTS] v1=1 base + up to 4 purchased, v2=3 base + up to 2 purchased, v3=5 base');
 
