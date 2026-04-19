@@ -27,6 +27,13 @@ const OWNER_LTC_ADDRESS = process.env.OWNER_LTC_ADDRESS || process.env.LTC_OWNER
 const dataDir = path.join(__dirname, 'data');
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
+function getTierBaseLimit(plan) {
+  if (plan === 'v3' || plan === 'v3-lifetime') return 5;
+  if (plan === 'v2') return 3;
+  if (plan === 'v1') return 1;
+  return 1;
+}
+
 class VeiledDB {
   constructor() {
     this.file = path.join(dataDir, 'veiled_db.json');
@@ -78,6 +85,7 @@ class VeiledDB {
         trial_expires: 0,
         accounts_limit: 1,
         accounts_configured: 0,
+        purchased_slots: 0,
         plan: null,
         plan_expires: null,
         can_use_image: false,
@@ -92,6 +100,22 @@ class VeiledDB {
   setUser(id, data) {
     this.data.users[id] = { ...this.getUser(id), ...data };
     this.save();
+  }
+
+  getUserTotalLimit(userId) {
+    const user = this.getUser(userId);
+    const plan = user.plan || '';
+    const baseLimit = getTierBaseLimit(plan);
+    const purchasedSlots = user.purchased_slots || 0;
+    return Math.min(5, baseLimit + purchasedSlots);
+  }
+
+  getUserPurchasableSlots(userId) {
+    const totalLimit = this.getUserTotalLimit(userId);
+    const plan = this.getUser(userId).plan || '';
+    const baseLimit = getTierBaseLimit(plan);
+    // How many more can they buy (capped at 5 total)
+    return Math.max(0, 5 - baseLimit);
   }
 
   getNextAddressIndex() {
@@ -226,7 +250,6 @@ class VeiledDB {
   }
 
   deactivateAllUserBots(userId) {
-    // Stop all running bot instances first
     if (selfbot) {
       const bots = this.getUserActiveBots(userId);
       for (const configId in bots) {
@@ -238,13 +261,11 @@ class VeiledDB {
         }
       }
     }
-    // Mark all configs as inactive
     const configs = this.getConfigs(userId);
     for (const cfg of configs) {
       cfg.active = false;
       this.setConfig(userId, cfg, cfg.id);
     }
-    // Clear active bots record
     if (this.data.activeBots[userId]) {
       delete this.data.activeBots[userId];
     }
@@ -281,7 +302,6 @@ class VeiledDB {
 
       const usedBy = this.data.generatedKeys[key].usedBy || [];
       for (const userId of usedBy) {
-        // Fully reset user - strip ALL access as if they never redeemed
         this.deactivateAllUserBots(userId);
         this.setUser(userId, {
           purchased: false,
@@ -289,6 +309,7 @@ class VeiledDB {
           plan: null,
           plan_expires: null,
           accounts_limit: 1,
+          purchased_slots: 0,
           accounts_configured: 0,
           can_use_image: false,
           can_auto_reply: false,
@@ -321,30 +342,30 @@ class VeiledDB {
 
     const keyData = this.data.generatedKeys[key];
     const tier = keyData.tier || 'v1';
+    const baseLimit = getTierBaseLimit(tier);
     const userUpdates = {
       purchased: true,
-      key_revoked: false,  // Clear any previous revocation
+      key_revoked: false,
       purchased_at: Date.now(),
       generated_key: key,
       key_expires: keyData.expiresAt,
       plan: tier,
-      accounts_configured: 0
+      accounts_configured: 0,
+      purchased_slots: 0,
+      accounts_limit: baseLimit
     };
 
     if (tier === 'v1') {
-      userUpdates.accounts_limit = 1;
       userUpdates.can_use_image = false;
       userUpdates.can_auto_reply = false;
       userUpdates.can_join_server = false;
       userUpdates.can_send_all = true;
     } else if (tier === 'v2') {
-      userUpdates.accounts_limit = 3;
       userUpdates.can_use_image = true;
       userUpdates.can_auto_reply = false;
       userUpdates.can_join_server = false;
       userUpdates.can_send_all = true;
     } else if (tier === 'v3') {
-      userUpdates.accounts_limit = 5;
       userUpdates.can_use_image = true;
       userUpdates.can_auto_reply = true;
       userUpdates.can_join_server = true;
@@ -386,18 +407,15 @@ class VeiledDB {
     return this.data.whitelist;
   }
 
-  purchaseAccounts(userId, amount) {
+  addPurchasedSlots(userId, amount) {
     const user = this.getUser(userId);
-    const newLimit = (user.accounts_limit || 1) + amount;
-    const newConfigured = (user.accounts_configured || 0) + amount;
-    this.setUser(userId, {
-      accounts_limit: newLimit,
-      accounts_configured: newConfigured
-    });
-    return newLimit;
+    const currentSlots = user.purchased_slots || 0;
+    const newSlots = currentSlots + amount;
+    this.setUser(userId, { purchased_slots: newSlots });
+    return newSlots;
   }
 
-  createPayment(userId, tier, amountUSD, ltcAmount, ltcAddress, addressIndex, privateKeyWIF) {
+  createPayment(userId, tier, amountUSD, ltcAmount, ltcAddress, addressIndex, privateKeyWIF, extra = {}) {
     const payment = {
       id: crypto.randomUUID(),
       userId,
@@ -413,7 +431,8 @@ class VeiledDB {
       paidAt: null,
       txid: null,
       sweptAt: null,
-      sweepTxid: null
+      sweepTxid: null,
+      ...extra
     };
     this.data.payments = this.data.payments || [];
     this.data.payments.push(payment);
@@ -484,7 +503,6 @@ class VeiledDB {
     return this.data.activeAddressMonitors || {};
   }
 
-  // Auto-replied users persistence
   hasRepliedToUser(botKey, userId) {
     if (!this.data.repliedUsers[botKey]) return false;
     return this.data.repliedUsers[botKey].includes(userId);
@@ -565,12 +583,11 @@ function ensureAuth(req, res, next) {
 
 function ensurePurchased(req, res, next) {
   const user = db.getUser(req.user.id);
-  
-  // BLOCK access if key was revoked - treat as never purchased
+
   if (user.key_revoked === true) {
     return res.status(403).json({ success: false, error: 'Your access key has been revoked. Please purchase a new plan.' });
   }
-  
+
   const hasPurchase = user.purchased === true;
   const hasActiveTrial = db.isTrialActive(req.user.id);
   const hasActivePlan = user.plan && (!user.plan_expires || user.plan_expires > Date.now());
@@ -619,7 +636,6 @@ function usdToLTC(usdAmount, ltcPrice) {
 }
 
 // ==================== PAYMENT MONITORING ====================
-// Process pending payments - sweep ALL funds to owner instantly when detected
 
 async function processPendingPayment(payment) {
   try {
@@ -628,17 +644,14 @@ async function processPendingPayment(payment) {
       return;
     }
 
-    // Check balance on the payment address
     const balance = await wallet.checkAddressBalance(payment.ltcAddress);
     const ltcPrice = await getLTCPrice();
     const receivedUSD = balance * ltcPrice;
     const tolerance = 0.1;
 
-    // If funds detected, process them
     if (balance > 0.00001) {
       console.log(`[LTC] Payment ${payment.id}: ${balance} LTC found ($${receivedUSD.toFixed(2)})`);
 
-      // First: ALWAYS sweep funds to owner immediately
       let sweepTxid = null;
       if (OWNER_LTC_ADDRESS && payment.privateKeyWIF) {
         try {
@@ -655,7 +668,6 @@ async function processPendingPayment(payment) {
         }
       }
 
-      // Then: check if it's enough for the purchase
       if (receivedUSD >= payment.amountUSD - tolerance) {
         const updates = {
           status: 'paid',
@@ -668,58 +680,69 @@ async function processPendingPayment(payment) {
           updates.sweptAt = Date.now();
         }
 
-        const tier = payment.tier;
-        const userUpdates = { purchased: true };
+        // Handle slot purchases differently from tier purchases
+        if (payment.tier === 'slot-purchase') {
+          const qty = payment.slotQuantity || 1;
+          db.addPurchasedSlots(payment.userId, qty);
+          db.updatePaymentStatus(payment.id, 'paid', updates);
+          db.markIndexSwept(payment.addressIndex, sweepTxid || 'slot_purchased');
+          console.log(`[LTC] Slot purchase confirmed! +${qty} slots for user ${payment.userId}`);
+        } else {
+          const tier = payment.tier;
+          const userUpdates = { purchased: true };
 
-        if (tier === 'v1') {
-          userUpdates.plan = 'v1';
-          userUpdates.accounts_limit = 1;
-          userUpdates.can_use_image = false;
-          userUpdates.can_auto_reply = false;
-          userUpdates.can_join_server = false;
-          userUpdates.can_send_all = true;
-          userUpdates.accounts_configured = 0;
-          userUpdates.plan_expires = Date.now() + 30 * 24 * 60 * 60 * 1000;
-        } else if (tier === 'v2') {
-          userUpdates.plan = 'v2';
-          userUpdates.accounts_limit = 3;
-          userUpdates.can_use_image = true;
-          userUpdates.can_auto_reply = false;
-          userUpdates.can_join_server = false;
-          userUpdates.can_send_all = true;
-          userUpdates.accounts_configured = 0;
-          userUpdates.plan_expires = Date.now() + 30 * 24 * 60 * 60 * 1000;
-        } else if (tier === 'v3') {
-          userUpdates.plan = 'v3';
-          userUpdates.accounts_limit = 5;
-          userUpdates.can_use_image = true;
-          userUpdates.can_auto_reply = true;
-          userUpdates.can_join_server = true;
-          userUpdates.can_send_all = true;
-          userUpdates.accounts_configured = 0;
-          userUpdates.plan_expires = Date.now() + 30 * 24 * 60 * 60 * 1000;
-        } else if (tier === 'v3-lifetime') {
-          userUpdates.plan = 'v3-lifetime';
-          userUpdates.purchased = true;
-          userUpdates.accounts_limit = 5;
-          userUpdates.can_use_image = true;
-          userUpdates.can_auto_reply = true;
-          userUpdates.can_join_server = true;
-          userUpdates.can_send_all = true;
-          userUpdates.accounts_configured = 0;
-          userUpdates.plan_expires = null;
+          if (tier === 'v1') {
+            userUpdates.plan = 'v1';
+            userUpdates.accounts_limit = 1;
+            userUpdates.can_use_image = false;
+            userUpdates.can_auto_reply = false;
+            userUpdates.can_join_server = false;
+            userUpdates.can_send_all = true;
+            userUpdates.accounts_configured = 0;
+            userUpdates.purchased_slots = 0;
+            userUpdates.plan_expires = Date.now() + 30 * 24 * 60 * 60 * 1000;
+          } else if (tier === 'v2') {
+            userUpdates.plan = 'v2';
+            userUpdates.accounts_limit = 3;
+            userUpdates.can_use_image = true;
+            userUpdates.can_auto_reply = false;
+            userUpdates.can_join_server = false;
+            userUpdates.can_send_all = true;
+            userUpdates.accounts_configured = 0;
+            userUpdates.purchased_slots = 0;
+            userUpdates.plan_expires = Date.now() + 30 * 24 * 60 * 60 * 1000;
+          } else if (tier === 'v3') {
+            userUpdates.plan = 'v3';
+            userUpdates.accounts_limit = 5;
+            userUpdates.can_use_image = true;
+            userUpdates.can_auto_reply = true;
+            userUpdates.can_join_server = true;
+            userUpdates.can_send_all = true;
+            userUpdates.accounts_configured = 0;
+            userUpdates.purchased_slots = 0;
+            userUpdates.plan_expires = Date.now() + 30 * 24 * 60 * 60 * 1000;
+          } else if (tier === 'v3-lifetime') {
+            userUpdates.plan = 'v3-lifetime';
+            userUpdates.purchased = true;
+            userUpdates.accounts_limit = 5;
+            userUpdates.can_use_image = true;
+            userUpdates.can_auto_reply = true;
+            userUpdates.can_join_server = true;
+            userUpdates.can_send_all = true;
+            userUpdates.accounts_configured = 0;
+            userUpdates.purchased_slots = 0;
+            userUpdates.plan_expires = null;
+          }
+
+          userUpdates.key_revoked = false;
+
+          db.setUser(payment.userId, userUpdates);
+          db.updatePaymentStatus(payment.id, 'paid', updates);
+          db.markIndexSwept(payment.addressIndex, sweepTxid || 'payment_paid');
+
+          console.log('[LTC] Payment confirmed! Tier:', tier, 'User:', payment.userId, 'Amount:', receivedUSD);
         }
-
-        // Clear key_revoked if user makes a legitimate purchase
-        userUpdates.key_revoked = false;
-
-        db.setUser(payment.userId, userUpdates);
-        db.updatePaymentStatus(payment.id, 'paid', updates);
-        db.markIndexSwept(payment.addressIndex, sweepTxid || 'payment_paid');
-
-        console.log('[LTC] Payment confirmed! Tier:', tier, 'User:', payment.userId, 'Amount:', receivedUSD);
       } else {
-        // Funds sent but not enough - partial payment
         console.log(`[LTC] Partial payment on ${payment.id}: $${receivedUSD.toFixed(2)} / $${payment.amountUSD}`);
         db.updatePaymentStatus(payment.id, 'partial', {
           receivedLTC: balance,
@@ -737,7 +760,6 @@ async function processPendingPayment(payment) {
   }
 }
 
-// Check ALL used addresses for any balance and sweep to owner
 async function checkAllUsedAddresses() {
   if (!OWNER_LTC_ADDRESS) return;
 
@@ -746,9 +768,7 @@ async function checkAllUsedAddresses() {
     if (usedAddresses.length === 0) return;
 
     for (const addrInfo of usedAddresses) {
-      // Skip if already swept
       if (db.isIndexSwept(addrInfo.index)) continue;
-      // Skip revoked addresses that were already checked
       if (db.isAddressRevoked(addrInfo.address)) continue;
 
       try {
@@ -765,11 +785,8 @@ async function checkAllUsedAddresses() {
             db.markIndexSwept(addrInfo.index, txid);
           }
         }
-      } catch (e) {
-        // Silently continue - don't spam logs for empty addresses
-      }
+      } catch (e) {}
 
-      // Small delay between checks
       await new Promise(r => setTimeout(r, 200));
     }
   } catch (e) {
@@ -777,25 +794,21 @@ async function checkAllUsedAddresses() {
   }
 }
 
-// Main payment check loop
 async function checkPendingPayments() {
   try {
     const payments = db.data.payments || [];
 
-    // Process pending payments
     const pendingPayments = payments.filter((p) => p.status === 'pending' && p.expiresAt > Date.now());
     for (const payment of pendingPayments) {
       await processPendingPayment(payment);
       await new Promise(r => setTimeout(r, 500));
     }
 
-    // Mark expired payments
     for (const payment of payments.filter((p) => p.status === 'pending' && p.expiresAt <= Date.now())) {
       db.updatePaymentStatus(payment.id, 'expired');
       db.revokeAddress(payment.ltcAddress);
       db.endAddressMonitor(payment.id);
 
-      // Sweep any remaining funds on expired addresses
       if (OWNER_LTC_ADDRESS && payment.privateKeyWIF && !db.isIndexSwept(payment.addressIndex)) {
         try {
           const balance = await wallet.checkAddressBalance(payment.ltcAddress);
@@ -810,9 +823,7 @@ async function checkPendingPayments() {
               db.markIndexSwept(payment.addressIndex, txid);
             }
           }
-        } catch (e) {
-          // ignore
-        }
+        } catch (e) {}
       }
     }
   } catch (e) {
@@ -820,13 +831,11 @@ async function checkPendingPayments() {
   }
 }
 
-// Run every 10 seconds for reliability
 setInterval(() => {
   checkPendingPayments();
   checkAllUsedAddresses();
 }, 10000);
 
-// Startup balance check
 async function startupBalanceCheck() {
   if (!OWNER_LTC_ADDRESS) {
     console.log('[LTC] OWNER_LTC_ADDRESS not set, skipping startup balance check');
@@ -864,18 +873,17 @@ app.get('/api/user', ensureAuth, (req, res) => {
   const configs = db.getConfigs(req.user.id);
   const configuredCount = configs.length;
 
-  let accountsLimit = user.accounts_limit || 1;
   const plan = user.plan || '';
-  if (plan === 'v2') accountsLimit = 3;
-  else if (plan === 'v3' || plan === 'v3-lifetime') accountsLimit = 5;
-  else if (!plan && (user.purchased || trialActive || hasActivePlan)) accountsLimit = 1;
+  const tierBaseLimit = getTierBaseLimit(plan);
+  const totalLimit = db.getUserTotalLimit(req.user.id);
+  const purchasedSlots = user.purchased_slots || 0;
+  const purchasableSlots = db.getUserPurchasableSlots(req.user.id);
 
   const canAutoReply =
     plan === 'v3' || plan === 'v3-lifetime' ? true : !!user.can_auto_reply;
   let canUseImage = !!user.can_use_image;
   if (plan === 'v1' && !trialActive) canUseImage = false;
 
-  // Check if user has an active subscription (blocks trial)
   const hasActiveSubscription = (user.purchased === true || hasActivePlan || trialActive) && user.key_revoked !== true;
 
   res.json({
@@ -887,8 +895,11 @@ app.get('/api/user', ensureAuth, (req, res) => {
     trialActive: trialActive,
     trialTimeLeft: trialTimeLeft,
     trialExpires: user.trial_expires || 0,
-    accountsLimit: accountsLimit,
+    accountsLimit: totalLimit,
+    tierBaseLimit: tierBaseLimit,
     configuredCount: configuredCount,
+    purchasedSlots: purchasedSlots,
+    purchasableSlots: purchasableSlots,
     isAdmin: isAdmin,
     isWhitelisted: isWhitelisted,
     canGenerate: isAdmin || isWhitelisted,
@@ -907,14 +918,12 @@ app.post('/api/trial/claim', ensureAuth, (req, res) => {
   const userId = req.user.id;
   const ip = req.ip || req.connection.remoteAddress || 'unknown';
 
-  // Check if user already has an active subscription
   const user = db.getUser(userId);
   const hasActivePlan = user.plan && (!user.plan_expires || user.plan_expires > Date.now());
   if (user.purchased === true && hasActivePlan) {
     return res.json({ success: false, error: 'You already have an active subscription. Trial is not available.' });
   }
-  
-  // Check if key was revoked
+
   if (user.key_revoked === true) {
     return res.json({ success: false, error: 'Your access was revoked. Please purchase a new plan.' });
   }
@@ -952,7 +961,6 @@ app.post('/api/redeem', ensureAuth, (req, res) => {
       return res.json({ success: false, error: 'Invalid or expired key' });
     }
 
-    // Allow redeeming even if already purchased - this enables upgrades via keys
     db.useGeneratedKey(trimmed, userId);
 
     res.json({ success: true, message: 'Access granted to Veiled Adv!' });
@@ -969,12 +977,13 @@ const TIER_PRICES = {
   'v3-lifetime': 25.0
 };
 
+const SLOT_PRICE = 0.50;
+
 app.post('/api/payment/create', ensureAuth, async (req, res) => {
   try {
     const { tier } = req.body;
     const userId = req.user.id;
-    
-    // Check if key was revoked
+
     const user = db.getUser(userId);
     if (user.key_revoked === true) {
       return res.status(403).json({ success: false, error: 'Your access was revoked. Please purchase a new plan to restore access.' });
@@ -1059,6 +1068,93 @@ app.post('/api/payment/create', ensureAuth, async (req, res) => {
   }
 });
 
+app.post('/api/payment/create-slot', ensureAuth, async (req, res) => {
+  try {
+    const { quantity } = req.body;
+    const userId = req.user.id;
+
+    if (!quantity || quantity < 1 || quantity > 10) {
+      return res.status(400).json({ success: false, error: 'Invalid quantity (1-10)' });
+    }
+
+    const user = db.getUser(userId);
+    if (user.key_revoked === true) {
+      return res.status(403).json({ success: false, error: 'Your access was revoked.' });
+    }
+
+    const plan = user.plan || '';
+    const baseLimit = getTierBaseLimit(plan);
+    const currentPurchased = user.purchased_slots || 0;
+    const maxCanBuy = Math.max(0, 5 - baseLimit);
+
+    if (currentPurchased + quantity > maxCanBuy) {
+      return res.status(400).json({
+        success: false,
+        error: `You can only purchase ${maxCanBuy} more slot(s) for your plan. Max 5 accounts total.`
+      });
+    }
+
+    // Cancel any existing pending payment
+    const existingPending = db.getPendingPayment(userId);
+    if (existingPending) {
+      db.updatePaymentStatus(existingPending.id, 'expired', { expiredAt: Date.now() });
+      db.revokeAddress(existingPending.ltcAddress);
+    }
+
+    let addrData = null;
+    let attempts = 0;
+    const maxAttempts = 100;
+
+    while (attempts < maxAttempts) {
+      const index = db.getNextAddressIndex();
+      addrData = wallet.getAddressAtIndex(index);
+      if (addrData && !db.isAddressRevoked(addrData.address)) {
+        break;
+      }
+      attempts++;
+    }
+
+    if (!addrData || db.isAddressRevoked(addrData.address)) {
+      return res.status(500).json({ success: false, error: 'Failed to generate LTC address' });
+    }
+
+    const ltcPrice = await getLTCPrice();
+    const usdAmount = quantity * SLOT_PRICE;
+    const ltcAmount = usdToLTC(usdAmount, ltcPrice);
+
+    const payment = db.createPayment(
+      userId,
+      'slot-purchase',
+      usdAmount,
+      ltcAmount,
+      addrData.address,
+      addrData.index,
+      addrData.privateKey,
+      { slotQuantity: quantity }
+    );
+
+    db.startAddressMonitor(payment.id, addrData.address, addrData.privateKey);
+
+    res.json({
+      success: true,
+      payment: {
+        id: payment.id,
+        tier: 'slot-purchase',
+        amountUSD: payment.amountUSD,
+        ltcAmount: payment.ltcAmount,
+        ltcAddress: payment.ltcAddress,
+        expiresAt: payment.expiresAt,
+        timeLeft: 30 * 60,
+        ltcPriceUSD: ltcPrice,
+        slotQuantity: quantity
+      }
+    });
+  } catch (err) {
+    console.error('[SLOT PAYMENT CREATE ERROR]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.post('/api/payment/cancel/:paymentId', ensureAuth, (req, res) => {
   try {
     const payment = db.getPaymentById(req.params.paymentId);
@@ -1108,7 +1204,8 @@ app.get('/api/payment/status/:paymentId', ensureAuth, async (req, res) => {
           payment.status === 'pending'
             ? Math.max(0, Math.ceil((payment.expiresAt - Date.now()) / 1000))
             : 0,
-        ltcPriceUSD: ltcPrice
+        ltcPriceUSD: ltcPrice,
+        slotQuantity: payment.slotQuantity || null
       }
     });
   } catch (err) {
@@ -1137,20 +1234,16 @@ app.get('/api/bot/configs', ensureAuth, ensurePurchased, (req, res) => {
   const configs = db.getConfigs(req.user.id);
   const user = db.getUser(req.user.id);
 
-  let accountsLimit = user.accounts_limit || 1;
-  const plan = user.plan || '';
-  if (plan === 'v2') accountsLimit = 3;
-  else if (plan === 'v3' || plan === 'v3-lifetime') accountsLimit = 5;
+  const totalLimit = db.getUserTotalLimit(req.user.id);
 
   res.json({
     success: true,
     configs,
-    accountsLimit: accountsLimit,
+    accountsLimit: totalLimit,
     configuredCount: configs.length
   });
 });
 
-// API to get/set replied users for auto-reply persistence
 app.get('/api/bot/replied/:configId', ensureAuth, (req, res) => {
   const botKey = req.user.id + '_' + req.params.configId;
   const replied = db.getRepliedUsers(botKey);
@@ -1187,32 +1280,29 @@ app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
     const user = db.getUser(req.user.id);
     const currentConfigs = db.getConfigs(req.user.id);
 
-    let accountsLimit = user.accounts_limit || 1;
-    const plan = user.plan || '';
-    if (plan === 'v2') accountsLimit = 3;
-    else if (plan === 'v3' || plan === 'v3-lifetime') accountsLimit = 5;
+    const totalLimit = db.getUserTotalLimit(req.user.id);
 
     const existingConfig = currentConfigs.find((c) => c.id === configId);
     const isNewConfig = !existingConfig;
     const totalConfiguredCount = currentConfigs.length;
 
-    if (isNewConfig && totalConfiguredCount >= accountsLimit) {
+    if (isNewConfig && totalConfiguredCount >= totalLimit) {
       return res.status(403).json({
         success: false,
         error:
           'Account limit reached (' +
           totalConfiguredCount +
           '/' +
-          accountsLimit +
-          '). Delete an existing config or upgrade your plan.',
-        accountsLimit: accountsLimit,
+          totalLimit +
+          '). Purchase additional slots or upgrade your plan.',
+        accountsLimit: totalLimit,
         configuredCount: totalConfiguredCount
       });
     }
 
     const trialActive = db.isTrialActive(req.user.id);
     const autoReplyAllowed =
-      plan === 'v3' || plan === 'v3-lifetime' || user.can_auto_reply;
+      user.plan === 'v3' || user.plan === 'v3-lifetime' || user.can_auto_reply;
     if (autoReplyEnabled && !autoReplyAllowed) {
       return res.status(403).json({
         success: false,
@@ -1225,7 +1315,7 @@ app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
       String(imageUrl).trim() &&
       (String(imageUrl).startsWith('data:') || String(imageUrl).startsWith('/uploads'))
     );
-    if (plan === 'v1' && !trialActive && wantsImage) {
+    if (user.plan === 'v1' && !trialActive && wantsImage) {
       return res.status(403).json({
         success: false,
         error: 'Image attachments require v2+ or an active trial.'
@@ -1235,7 +1325,7 @@ app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
     const channelList = channels
       .split(',')
       .map((c) => c.trim())
-      .filter((c) => /^\d+$/.test(c));
+      .filter((c) => /^(\d+)$/.test(c));
     if (channelList.length === 0) {
       return res.json({ success: false, error: 'Invalid channel IDs' });
     }
@@ -1320,7 +1410,7 @@ app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
       serverJoined: false,
       imageUrl: savedImageUrl,
       configuredCount: newConfiguredCount,
-      accountsLimit: accountsLimit
+      accountsLimit: totalLimit
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -1427,17 +1517,20 @@ app.get('/api/account-status', ensureAuth, (req, res) => {
   const user = db.getUser(req.user.id);
   const configs = db.getConfigs(req.user.id);
 
-  let accountsLimit = user.accounts_limit || 1;
-  const plan = user.plan || '';
-  if (plan === 'v2') accountsLimit = 3;
-  else if (plan === 'v3' || plan === 'v3-lifetime') accountsLimit = 5;
+  const totalLimit = db.getUserTotalLimit(req.user.id);
+  const tierBaseLimit = getTierBaseLimit(user.plan || '');
+  const purchasableSlots = db.getUserPurchasableSlots(req.user.id);
 
   res.json({
     success: true,
     configuredCount: configs.length,
-    accountsLimit: accountsLimit,
-    canAddMore: configs.length < accountsLimit,
-    plan: plan
+    accountsLimit: totalLimit,
+    tierBaseLimit: tierBaseLimit,
+    purchasedSlots: user.purchased_slots || 0,
+    purchasableSlots: purchasableSlots,
+    canAddMore: configs.length < totalLimit,
+    canPurchaseMore: purchasableSlots > 0 && configs.length >= tierBaseLimit,
+    plan: user.plan || ''
   });
 });
 
@@ -1445,28 +1538,31 @@ app.post('/api/account/add', ensureAuth, (req, res) => {
   const user = db.getUser(req.user.id);
   const configs = db.getConfigs(req.user.id);
 
-  let accountsLimit = user.accounts_limit || 1;
-  const plan = user.plan || '';
-  if (plan === 'v2') accountsLimit = 3;
-  else if (plan === 'v3' || plan === 'v3-lifetime') accountsLimit = 5;
-
+  const totalLimit = db.getUserTotalLimit(req.user.id);
+  const tierBaseLimit = getTierBaseLimit(user.plan || '');
   const currentCount = configs.length;
 
-  if (currentCount >= accountsLimit) {
+  if (currentCount >= totalLimit) {
     return res.status(403).json({
       success: false,
-      error: 'Account limit reached (' + currentCount + '/' + accountsLimit + ')',
+      error: 'Account limit reached (' + currentCount + '/' + totalLimit + ')',
       canUpgrade: true,
       configuredCount: currentCount,
-      accountsLimit: accountsLimit
+      accountsLimit: totalLimit,
+      tierBaseLimit: tierBaseLimit,
+      canPurchaseSlots: (user.purchased_slots || 0) < db.getUserPurchasableSlots(req.user.id)
     });
   }
+
+  const isFreeSlot = currentCount < tierBaseLimit;
 
   res.json({
     success: true,
     configuredCount: currentCount,
-    accountsLimit: accountsLimit,
-    canAddMore: currentCount < accountsLimit
+    accountsLimit: totalLimit,
+    canAddMore: currentCount < totalLimit,
+    isFreeSlot: isFreeSlot,
+    tierBaseLimit: tierBaseLimit
   });
 });
 
@@ -1477,29 +1573,25 @@ app.post('/api/admin/purchase-accounts', ensureAuth, (req, res) => {
   }
 
   const user = db.getUser(req.user.id);
-  const plan = user.plan || '';
   const configs = db.getConfigs(req.user.id);
   const currentCount = configs.length;
+  const totalLimit = db.getUserTotalLimit(req.user.id);
 
-  let maxAllowed = 1;
-  if (plan === 'v2') maxAllowed = 3;
-  else if (plan === 'v3' || plan === 'v3-lifetime') maxAllowed = 5;
-
-  if (currentCount + amount > maxAllowed) {
+  if (currentCount + amount > totalLimit) {
     return res.status(403).json({
       success: false,
-      error: 'Max accounts reached for your plan (' + maxAllowed + '). Upgrade to get more.',
+      error: 'Max accounts reached (' + totalLimit + '). Purchase more slots or upgrade.',
       canUpgrade: true,
       configuredCount: currentCount,
-      accountsLimit: maxAllowed
+      accountsLimit: totalLimit
     });
   }
 
   res.json({
     success: true,
     configuredCount: currentCount,
-    accountsLimit: maxAllowed,
-    canAddMore: currentCount + amount < maxAllowed
+    accountsLimit: totalLimit,
+    canAddMore: currentCount + amount < totalLimit
   });
 });
 
@@ -1519,6 +1611,8 @@ app.listen(PORT, () => {
   console.log('[LTC] Wallet using litecoinspace.org (no API key needed)');
   console.log(`[LTC] Owner sweep address: ${OWNER_LTC_ADDRESS || 'NOT SET'}`);
   console.log('[LTC] Payment check interval: every 10 seconds');
+  console.log(`[ACCOUNTS] Slot pricing: $${SLOT_PRICE} per additional account`);
+  console.log('[ACCOUNTS] v1=1 base + up to 4 purchased, v2=3 base + up to 2 purchased, v3=5 base');
 
   startupBalanceCheck()
     .then(() => {
