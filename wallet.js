@@ -87,6 +87,10 @@ async function fetchTxHex(txid) {
   throw new Error('Could not get tx hex for ' + txid);
 }
 
+/**
+ * Check total balance including unconfirmed (mempool) transactions.
+ * Used for displaying received amounts to users.
+ */
 async function checkAddressBalance(address) {
   if (looksLikeNonLitecoinAddress(address)) {
     if (!skipLogged.has(address)) {
@@ -107,6 +111,27 @@ async function checkAddressBalance(address) {
     return (funded - spent) / 1e8;
   } catch (e) {
     console.error('[WALLET] Balance error', address, e.message);
+    return 0;
+  }
+}
+
+/**
+ * Check ONLY confirmed balance (excludes mempool/unconfirmed transactions).
+ * Used for sweep decisions — we can only spend confirmed UTXOs.
+ */
+async function checkConfirmedBalance(address) {
+  if (looksLikeNonLitecoinAddress(address)) {
+    return 0;
+  }
+  try {
+    const data = await fetchJson(`https://litecoinspace.org/api/address/${address}`);
+    const chain = data.chain_stats || {};
+    // Only count confirmed chain stats, ignore mempool
+    const funded = chain.funded_txo_sum || 0;
+    const spent = chain.spent_txo_sum || 0;
+    return (funded - spent) / 1e8;
+  } catch (e) {
+    console.error('[WALLET] Confirmed balance error', address, e.message);
     return 0;
   }
 }
@@ -216,6 +241,7 @@ async function sweepAddressIfFunded(addressIndex, privateKeyWIF, address, ownerA
 module.exports = {
   getAddressAtIndex,
   checkAddressBalance,
+  checkConfirmedBalance,
   createTransaction,
   sweepAddressIfFunded,
 };
