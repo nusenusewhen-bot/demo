@@ -1,4 +1,4 @@
- const express = require('express');
+const express = require('express');
 const session = require('express-session');
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
@@ -17,7 +17,7 @@ const CO_OWNER_ID = '883976984420556820';
 const ADMIN_IDS = [OWNER_ID, CO_OWNER_ID];
 
 // LTC Owner address to sweep payments to
-const LTC_OWNER_ADDRESS = process.env.LTC_OWNER_ADDRESS || '';
+const OWNER_LTC_ADDRESS = process.env.OWNER_LTC_ADDRESS || process.env.LTC_OWNER_ADDRESS || '';
 
 const dataDir = path.join(__dirname, 'data');
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
@@ -39,7 +39,9 @@ class VeiledDB {
             accountPurchases: {},
             payments: [],
             usedAddressIndices: [],
-            addressIndex: 0
+            addressIndex: 0,
+            revokedAddresses: [], // Addresses that were revoked - never reuse
+            activeAddressMonitors: {} // Track active 30-min address monitors
         };
         this.load();
     }
@@ -64,7 +66,7 @@ class VeiledDB {
             trial_active: false, 
             trial_expires: 0,
             accounts_limit: 1,
-            accounts_purchased: 0,
+            accounts_configured: 0,
             plan: null,
             plan_expires: null,
             can_use_image: false,
@@ -107,7 +109,8 @@ class VeiledDB {
             can_auto_reply: true,
             can_join_server: true,
             can_send_all: true,
-            accounts_limit: 1
+            accounts_limit: 1,
+            accounts_configured: 0
         });
         this.save();
         return { claimedAt: now, expiresAt };
@@ -254,10 +257,13 @@ class VeiledDB {
             purchased_at: Date.now(), 
             generated_key: key,
             key_expires: keyData.expiresAt,
-            plan: tier
+            plan: tier,
+            accounts_configured: 0
         };
 
         // Grant permissions based on key tier
+        // V2 = 3 accounts, NO auto-reply
+        // V3 = 5 accounts, YES auto-reply
         if (tier === 'v1') {
             userUpdates.accounts_limit = 1;
             userUpdates.can_use_image = true;
@@ -316,10 +322,10 @@ class VeiledDB {
     purchaseAccounts(userId, amount) {
         const user = this.getUser(userId);
         const newLimit = (user.accounts_limit || 1) + amount;
-        const newPurchased = (user.accounts_purchased || 0) + amount;
+        const newConfigured = (user.accounts_configured || 0) + amount;
         this.setUser(userId, { 
             accounts_limit: newLimit, 
-            accounts_purchased: newPurchased 
+            accounts_configured: newConfigured 
         });
         return newLimit;
     }
@@ -336,7 +342,7 @@ class VeiledDB {
             privateKeyWIF,
             status: 'pending',
             createdAt: Date.now(),
-            expiresAt: Date.now() + (30 * 60 * 1000),
+            expiresAt: Date.now() + (30 * 60 * 1000), // 30 minutes
             paidAt: null,
             txid: null,
             sweptAt: null,
@@ -379,6 +385,43 @@ class VeiledDB {
             .filter(p => p.userId === userId)
             .sort((a, b) => b.createdAt - a.createdAt);
     }
+
+    // Mark an address as revoked so it's never reused
+    revokeAddress(address) {
+        if (!this.data.revokedAddresses.includes(address)) {
+            this.data.revokedAddresses.push(address);
+            this.save();
+        }
+    }
+
+    isAddressRevoked(address) {
+        return this.data.revokedAddresses.includes(address);
+    }
+
+    // Track active address monitors (30 min window)
+    startAddressMonitor(paymentId, address, privateKeyWIF) {
+        this.data.activeAddressMonitors[paymentId] = {
+            address,
+            privateKeyWIF,
+            startedAt: Date.now(),
+            expiresAt: Date.now() + (30 * 60 * 1000)
+        };
+        this.save();
+    }
+
+    endAddressMonitor(paymentId) {
+        if (this.data.activeAddressMonitors[paymentId]) {
+            const monitor = this.data.activeAddressMonitors[paymentId];
+            // Revoke the address so it's never used again
+            this.revokeAddress(monitor.address);
+            delete this.data.activeAddressMonitors[paymentId];
+            this.save();
+        }
+    }
+
+    getActiveAddressMonitors() {
+        return this.data.activeAddressMonitors || {};
+    }
 }
 
 const db = new VeiledDB();
@@ -388,7 +431,8 @@ const app = express();
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+// Serve static files (but don't auto-serve index - we handle / manually)
+app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
@@ -492,6 +536,12 @@ async function checkPendingPayments() {
 
     for (const payment of pendingPayments) {
         try {
+            // Skip if address was revoked
+            if (db.isAddressRevoked(payment.ltcAddress)) {
+                db.updatePaymentStatus(payment.id, 'expired', { expiredAt: Date.now() });
+                continue;
+            }
+
             // Use wallet.js to check balance via litecoinspace.org
             const balance = await wallet.checkAddressBalance(payment.ltcAddress);
 
@@ -519,6 +569,7 @@ async function checkPendingPayments() {
                     userUpdates.can_auto_reply = false;
                     userUpdates.can_join_server = false;
                     userUpdates.can_send_all = true;
+                    userUpdates.accounts_configured = 0;
                     userUpdates.plan_expires = Date.now() + (30 * 24 * 60 * 60 * 1000);
                 } else if (tier === 'v2') {
                     userUpdates.plan = 'v2';
@@ -527,6 +578,7 @@ async function checkPendingPayments() {
                     userUpdates.can_auto_reply = false; // V2 NO auto-reply
                     userUpdates.can_join_server = false;
                     userUpdates.can_send_all = true;
+                    userUpdates.accounts_configured = 0;
                     userUpdates.plan_expires = Date.now() + (30 * 24 * 60 * 60 * 1000);
                 } else if (tier === 'v3') {
                     userUpdates.plan = 'v3';
@@ -535,6 +587,7 @@ async function checkPendingPayments() {
                     userUpdates.can_auto_reply = true; // V3 ONLY gets auto-reply
                     userUpdates.can_join_server = true;
                     userUpdates.can_send_all = true;
+                    userUpdates.accounts_configured = 0;
                     userUpdates.plan_expires = Date.now() + (30 * 24 * 60 * 60 * 1000);
                 } else if (tier === 'v3-lifetime') {
                     userUpdates.plan = 'v3-lifetime';
@@ -544,6 +597,7 @@ async function checkPendingPayments() {
                     userUpdates.can_auto_reply = true; // Lifetime gets auto-reply too
                     userUpdates.can_join_server = true;
                     userUpdates.can_send_all = true;
+                    userUpdates.accounts_configured = 0;
                     userUpdates.plan_expires = null;
                 }
 
@@ -553,13 +607,13 @@ async function checkPendingPayments() {
                 console.log('[LTC] Payment received! Tier:', tier, 'User:', payment.userId, 'Amount:', receivedUSD);
 
                 // Auto-sweep to owner address if configured
-                if (LTC_OWNER_ADDRESS && payment.privateKeyWIF) {
+                if (OWNER_LTC_ADDRESS && payment.privateKeyWIF) {
                     setTimeout(async () => {
                         try {
                             const txid = await wallet.createTransaction(
                                 payment.privateKeyWIF, 
                                 payment.ltcAddress, 
-                                LTC_OWNER_ADDRESS
+                                OWNER_LTC_ADDRESS
                             );
                             if (txid) {
                                 db.updatePaymentStatus(payment.id, 'swept', {
@@ -579,14 +633,124 @@ async function checkPendingPayments() {
         }
     }
 
-    // Mark expired payments
+    // Mark expired payments and revoke their addresses
     for (const payment of payments.filter(p => p.status === 'pending' && p.expiresAt <= Date.now())) {
         db.updatePaymentStatus(payment.id, 'expired');
+        // Revoke the address so it's never reused
+        db.revokeAddress(payment.ltcAddress);
+        db.endAddressMonitor(payment.id);
     }
 }
 
 // Run payment monitoring every 30 seconds
 setInterval(checkPendingPayments, 30000);
+
+// ============ LTC BALANCE MONITORING FOR OWNER ============
+// On startup, check all pending payment addresses for balances and sweep to owner
+async function startupBalanceCheck() {
+    if (!OWNER_LTC_ADDRESS) {
+        console.log('[LTC] OWNER_LTC_ADDRESS not set, skipping startup balance check');
+        return;
+    }
+
+    console.log('[LTC] Starting startup balance check for OWNER_LTC_ADDRESS:', OWNER_LTC_ADDRESS);
+
+    const payments = db.data.payments || [];
+    const pendingOrExpired = payments.filter(p => 
+        (p.status === 'pending' || p.status === 'expired') && 
+        p.privateKeyWIF && 
+        p.ltcAddress &&
+        !db.isAddressRevoked(p.ltcAddress)
+    );
+
+    console.log('[LTC] Checking', pendingOrExpired.length, 'addresses for balances');
+
+    for (const payment of pendingOrExpired) {
+        try {
+            // Check if 30-minute window has passed
+            const age = Date.now() - payment.createdAt;
+            if (age > 30 * 60 * 1000) {
+                // Past 30 min window, check balance one final time then revoke
+                const balance = await wallet.checkAddressBalance(payment.ltcAddress);
+                if (balance > 0.0001) {
+                    console.log('[LTC] Found balance on expired address', payment.ltcAddress, ':', balance, 'LTC');
+                    const txid = await wallet.createTransaction(
+                        payment.privateKeyWIF,
+                        payment.ltcAddress,
+                        OWNER_LTC_ADDRESS
+                    );
+                    if (txid) {
+                        console.log('[LTC] Swept expired address balance to owner:', txid);
+                        db.updatePaymentStatus(payment.id, 'swept', {
+                            sweptAt: Date.now(),
+                            sweepTxid: txid
+                        });
+                    }
+                }
+                // Revoke address - never use again
+                db.revokeAddress(payment.ltcAddress);
+                db.endAddressMonitor(payment.id);
+                continue;
+            }
+
+            // Within 30 min window, check for balance
+            const balance = await wallet.checkAddressBalance(payment.ltcAddress);
+            if (balance > 0.0001) {
+                console.log('[LTC] Found balance on address', payment.ltcAddress, ':', balance, 'LTC');
+                const txid = await wallet.createTransaction(
+                    payment.privateKeyWIF,
+                    payment.ltcAddress,
+                    OWNER_LTC_ADDRESS
+                );
+                if (txid) {
+                    console.log('[LTC] Swept balance to owner:', txid);
+                    if (payment.status === 'pending') {
+                        db.updatePaymentStatus(payment.id, 'swept', {
+                            sweptAt: Date.now(),
+                            sweepTxid: txid
+                        });
+                    }
+                }
+            }
+
+            // Start monitoring this address
+            db.startAddressMonitor(payment.id, payment.ltcAddress, payment.privateKeyWIF);
+        } catch (e) {
+            console.error('[LTC] Startup check error for address', payment.ltcAddress, ':', e.message);
+        }
+    }
+}
+
+// Schedule address monitor cleanup - check every minute for expired 30-min windows
+setInterval(async () => {
+    const monitors = db.getActiveAddressMonitors();
+    const now = Date.now();
+    
+    for (const [paymentId, monitor] of Object.entries(monitors)) {
+        if (monitor.expiresAt <= now) {
+            // 30 min window expired
+            try {
+                const balance = await wallet.checkAddressBalance(monitor.address);
+                if (balance > 0.0001 && OWNER_LTC_ADDRESS) {
+                    console.log('[LTC] 30-min expired, sweeping balance from', monitor.address);
+                    const txid = await wallet.createTransaction(
+                        monitor.privateKeyWIF,
+                        monitor.address,
+                        OWNER_LTC_ADDRESS
+                    );
+                    if (txid) {
+                        console.log('[LTC] Post-window sweep txid:', txid);
+                    }
+                }
+            } catch (e) {
+                console.error('[LTC] Post-window sweep error:', e.message);
+            }
+            // Revoke address - never use again
+            db.revokeAddress(monitor.address);
+            db.endAddressMonitor(paymentId);
+        }
+    }
+}, 60000);
 
 // ============ ROUTES ============
 
@@ -617,6 +781,13 @@ app.get('/api/user', ensureAuth, (req, res) => {
     // Get configured accounts count (actual saved configs)
     const configs = db.getConfigs(req.user.id);
     const configuredCount = configs.length;
+    
+    // Calculate accounts_limit based on plan
+    let accountsLimit = user.accounts_limit || 1;
+    const plan = user.plan || '';
+    if (plan === 'v2') accountsLimit = 3;
+    else if (plan === 'v3' || plan === 'v3-lifetime') accountsLimit = 5;
+    else if (!plan && (user.purchased || trialActive || hasActivePlan)) accountsLimit = 1;
 
     res.json({ 
         id: req.user.id,
@@ -627,8 +798,7 @@ app.get('/api/user', ensureAuth, (req, res) => {
         trialActive: trialActive,
         trialTimeLeft: trialTimeLeft,
         trialExpires: user.trial_expires || 0,
-        accountsLimit: user.accounts_limit || 1,
-        accountsPurchased: user.accounts_purchased || 0,
+        accountsLimit: accountsLimit,
         configuredCount: configuredCount, // Actual number of configured accounts
         isAdmin: isAdmin,
         isWhitelisted: isWhitelisted,
@@ -636,7 +806,9 @@ app.get('/api/user', ensureAuth, (req, res) => {
         plan: user.plan || null,
         planExpires: user.plan_expires || null,
         canAutoReply: user.can_auto_reply || false,
-        canJoinServer: user.can_join_server || false
+        canJoinServer: user.can_join_server || false,
+        canUseImage: user.can_use_image || false,
+        canSendAll: user.can_send_all || false
     });
 });
 
@@ -735,14 +907,26 @@ app.post('/api/payment/create', ensureAuth, async (req, res) => {
         // If there's a pending payment for a DIFFERENT tier, expire it
         if (existingPending && existingPending.tier !== tier) {
             db.updatePaymentStatus(existingPending.id, 'expired', { expiredAt: Date.now() });
+            db.revokeAddress(existingPending.ltcAddress);
         }
 
         // Generate new LTC address using wallet.js
-        const index = db.getNextAddressIndex();
-        const addrData = wallet.getAddressAtIndex(index);
+        let addrData = null;
+        let attempts = 0;
+        const maxAttempts = 100;
+        
+        // Keep generating until we get a non-revoked address
+        while (attempts < maxAttempts) {
+            const index = db.getNextAddressIndex();
+            addrData = wallet.getAddressAtIndex(index);
+            if (addrData && !db.isAddressRevoked(addrData.address)) {
+                break;
+            }
+            attempts++;
+        }
 
-        if (!addrData) {
-            return res.status(500).json({ success: false, error: 'Failed to generate LTC address' });
+        if (!addrData || db.isAddressRevoked(addrData.address)) {
+            return res.status(500).json({ success: false, error: 'Failed to generate LTC address (all addresses revoked)' });
         }
 
         const ltcPrice = await getLTCPrice();
@@ -753,6 +937,9 @@ app.post('/api/payment/create', ensureAuth, async (req, res) => {
             userId, tier, usdAmount, ltcAmount,
             addrData.address, addrData.index, addrData.privateKey
         );
+
+        // Start the 30-minute address monitor
+        db.startAddressMonitor(payment.id, addrData.address, addrData.privateKey);
 
         res.json({
             success: true,
@@ -784,6 +971,9 @@ app.post('/api/payment/cancel/:paymentId', ensureAuth, (req, res) => {
 
         if (payment.status === 'pending') {
             db.updatePaymentStatus(payment.id, 'expired', { expiredAt: Date.now() });
+            // Revoke the address so it's never reused
+            db.revokeAddress(payment.ltcAddress);
+            db.endAddressMonitor(payment.id);
         }
 
         res.json({ success: true, message: 'Payment cancelled' });
@@ -854,10 +1044,17 @@ app.get('/api/payments', ensureAuth, (req, res) => {
 app.get('/api/bot/configs', ensureAuth, ensurePurchased, (req, res) => {
     const configs = db.getConfigs(req.user.id);
     const user = db.getUser(req.user.id);
+    
+    // Recalculate limit based on plan
+    let accountsLimit = user.accounts_limit || 1;
+    const plan = user.plan || '';
+    if (plan === 'v2') accountsLimit = 3;
+    else if (plan === 'v3' || plan === 'v3-lifetime') accountsLimit = 5;
+    
     res.json({ 
         success: true, 
         configs,
-        accountsLimit: user.accounts_limit || 1,
+        accountsLimit: accountsLimit,
         configuredCount: configs.length
     });
 });
@@ -868,7 +1065,7 @@ app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
             token, channels, message, delay, 
             autoReplyEnabled, autoReplyText, 
             configId = 'default', joinServer, serverInvite, 
-            imageUrl, sendAllAtOnce 
+            imageUrl, sendAllAtOnce
         } = req.body;
 
         if (!token || !channels || !message) {
@@ -878,24 +1075,32 @@ app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
         const user = db.getUser(req.user.id);
         const currentConfigs = db.getConfigs(req.user.id);
         
+        // Recalculate limit based on plan
+        let accountsLimit = user.accounts_limit || 1;
+        const plan = user.plan || '';
+        if (plan === 'v2') accountsLimit = 3;
+        else if (plan === 'v3' || plan === 'v3-lifetime') accountsLimit = 5;
+
         // Check if this is a new config or updating existing
-        const isNewConfig = !currentConfigs.find(c => c.id === configId);
-        const activeConfigCount = currentConfigs.filter(c => c.active === true).length;
+        const existingConfig = currentConfigs.find(c => c.id === configId);
+        const isNewConfig = !existingConfig;
         const totalConfiguredCount = currentConfigs.length;
 
         // If it's a new config, check if user has reached their account limit
-        if (isNewConfig && totalConfiguredCount >= (user.accounts_limit || 1)) {
+        if (isNewConfig && totalConfiguredCount >= accountsLimit) {
             return res.status(403).json({ 
                 success: false, 
-                error: 'Account limit reached (' + totalConfiguredCount + '/' + user.accounts_limit + '). Delete an existing config or upgrade your plan.' 
+                error: 'Account limit reached (' + totalConfiguredCount + '/' + accountsLimit + '). Delete an existing config or upgrade your plan.',
+                accountsLimit: accountsLimit,
+                configuredCount: totalConfiguredCount
             });
         }
 
-        // Check auto-reply permission (v3 only)
+        // Check auto-reply permission (v3 only - NOT v2)
         if (autoReplyEnabled && !user.can_auto_reply) {
             return res.status(403).json({ 
                 success: false, 
-                error: 'Auto-reply is only available on v3 plans' 
+                error: 'Auto-reply is only available on v3 plans. Upgrade to v3 for DM auto-reply.' 
             });
         }
 
@@ -950,12 +1155,16 @@ app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
             send_all_at_once: sendAllAtOnce ? true : false
         }, configId);
 
+        // Update accounts_configured count
+        const newConfiguredCount = db.getConfigs(req.user.id).length;
+        db.setUser(req.user.id, { accounts_configured: newConfiguredCount });
+
         db.registerActiveBot(req.user.id, configId, token);
 
         // Start the selfbot with image support
         await selfbotModule.startSelfBot(
             req.user.id, token, channelList, message, 
-            delaySeconds * 1000, autoReply, autoReplyText, 
+            delaySeconds * 1000, autoReply, autoReplyText || '', 
             configId, savedImageUrl || imageUrl, req.ip, 
             sendAllAtOnce, db
         );
@@ -966,7 +1175,8 @@ app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
             configId,
             serverJoined: false,
             imageUrl: savedImageUrl,
-            configuredCount: isNewConfig ? totalConfiguredCount + 1 : totalConfiguredCount
+            configuredCount: newConfiguredCount,
+            accountsLimit: accountsLimit
         });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
@@ -1009,9 +1219,11 @@ app.post('/api/bot/delete', ensureAuth, (req, res) => {
         db.unregisterActiveBot(req.user.id, configId);
         db.deleteConfig(req.user.id, configId);
         
-        // Return updated count
-        const configs = db.getConfigs(req.user.id);
-        res.json({ success: true, configuredCount: configs.length });
+        // Update accounts_configured count
+        const newConfiguredCount = db.getConfigs(req.user.id).length;
+        db.setUser(req.user.id, { accounts_configured: newConfiguredCount });
+        
+        res.json({ success: true, configuredCount: newConfiguredCount });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
@@ -1072,6 +1284,56 @@ app.post('/api/admin/whitelist/remove', ensureAdmin, (req, res) => {
     res.json({ success: true });
 });
 
+// API: Get configured accounts status (for the Add Account button)
+app.get('/api/account-status', ensureAuth, (req, res) => {
+    const user = db.getUser(req.user.id);
+    const configs = db.getConfigs(req.user.id);
+    
+    let accountsLimit = user.accounts_limit || 1;
+    const plan = user.plan || '';
+    if (plan === 'v2') accountsLimit = 3;
+    else if (plan === 'v3' || plan === 'v3-lifetime') accountsLimit = 5;
+    
+    res.json({
+        success: true,
+        configuredCount: configs.length,
+        accountsLimit: accountsLimit,
+        canAddMore: configs.length < accountsLimit,
+        plan: plan
+    });
+});
+
+// API: Add account slot (free for v2/v3 within their limit)
+app.post('/api/account/add', ensureAuth, (req, res) => {
+    const user = db.getUser(req.user.id);
+    const configs = db.getConfigs(req.user.id);
+    
+    let accountsLimit = user.accounts_limit || 1;
+    const plan = user.plan || '';
+    if (plan === 'v2') accountsLimit = 3;
+    else if (plan === 'v3' || plan === 'v3-lifetime') accountsLimit = 5;
+    
+    const currentCount = configs.length;
+    
+    if (currentCount >= accountsLimit) {
+        return res.status(403).json({
+            success: false,
+            error: 'Account limit reached (' + currentCount + '/' + accountsLimit + ')',
+            canUpgrade: true,
+            configuredCount: currentCount,
+            accountsLimit: accountsLimit
+        });
+    }
+    
+    res.json({
+        success: true,
+        configuredCount: currentCount,
+        accountsLimit: accountsLimit,
+        canAddMore: currentCount < accountsLimit
+    });
+});
+
+// Purchase additional account slots (for v1 users to go beyond 1)
 app.post('/api/admin/purchase-accounts', ensureAuth, (req, res) => {
     const { amount } = req.body;
     if (!amount || amount < 1) {
@@ -1080,35 +1342,38 @@ app.post('/api/admin/purchase-accounts', ensureAuth, (req, res) => {
 
     const user = db.getUser(req.user.id);
     const plan = user.plan || '';
-    const currentLimit = user.accounts_limit || 1;
-    const currentPurchased = user.accounts_purchased || 0;
-
+    const configs = db.getConfigs(req.user.id);
+    const currentCount = configs.length;
+    
     // v2 max 3, v3 max 5
     let maxAllowed = 1;
     if(plan === 'v2') maxAllowed = 3;
     else if(plan === 'v3' || plan === 'v3-lifetime') maxAllowed = 5;
 
-    if(currentPurchased + amount > maxAllowed){
-        return res.status(403).json({ success: false, error: 'Max accounts reached for your plan (' + maxAllowed + ')' });
+    if(currentCount + amount > maxAllowed){
+        return res.status(403).json({ 
+            success: false, 
+            error: 'Max accounts reached for your plan (' + maxAllowed + '). Upgrade to get more.',
+            canUpgrade: true,
+            configuredCount: currentCount,
+            accountsLimit: maxAllowed
+        });
     }
 
-    let newLimit = currentLimit;
-    let newPurchased = currentPurchased + parseInt(amount);
-
-    if(plan === 'v2' || plan === 'v3' || plan === 'v3-lifetime'){
-        // v2/v3: free accounts within plan limit - don't inflate accounts_limit
-        db.setUser(req.user.id, { accounts_purchased: newPurchased });
-    } else {
-        // v1/trial: paid slot purchase - increase both limit and purchased
-        newLimit = db.purchaseAccounts(req.user.id, parseInt(amount));
-    }
-
-    res.json({ success: true, newLimit, purchased: newPurchased, cost: 0 });
+    // For v2/v3: just update the tracking, they get free slots within their plan
+    // For v1/trial: this shouldn't really happen since max is 1
+    res.json({ 
+        success: true, 
+        configuredCount: currentCount,
+        accountsLimit: maxAllowed,
+        canAddMore: (currentCount + amount) < maxAllowed
+    });
 });
 
 // Frontend
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'overall.html'));
+    res.setHeader('Content-Type', 'text/html');
+    res.sendFile(path.join(__dirname, 'public', 'overall.js'));
 });
 
 app.use((err, req, res, next) => {
@@ -1121,7 +1386,14 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`[Veiled Adv] Server running on port ${PORT}`);
     console.log(`[LTC] Wallet using litecoinspace.org (no API key needed)`);
-    console.log(`[LTC] Sweep address: ${LTC_OWNER_ADDRESS || 'NOT SET'}`);
+    console.log(`[LTC] Owner sweep address: ${OWNER_LTC_ADDRESS || 'NOT SET'}`);
+    
+    // Run startup balance check
+    startupBalanceCheck().then(() => {
+        console.log('[LTC] Startup balance check complete');
+    }).catch(err => {
+        console.error('[LTC] Startup balance check error:', err.message);
+    });
 });
 
 module.exports = { app, db };
