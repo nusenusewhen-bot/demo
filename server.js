@@ -111,11 +111,10 @@ class VeiledDB {
   }
 
   getUserPurchasableSlots(userId) {
-    const totalLimit = this.getUserTotalLimit(userId);
     const plan = this.getUser(userId).plan || '';
     const baseLimit = getTierBaseLimit(plan);
-    // How many more can they buy (capped at 5 total)
-    return Math.max(0, 5 - baseLimit);
+    const purchasedSlots = this.getUser(userId).purchased_slots || 0;
+    return Math.max(0, 5 - baseLimit - purchasedSlots);
   }
 
   getNextAddressIndex() {
