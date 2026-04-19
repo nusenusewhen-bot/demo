@@ -38,7 +38,8 @@ class VeiledDB {
       addressIndex: 0,
       revokedAddresses: [],
       activeAddressMonitors: {},
-      sweptIndices: {}  // Track indices we've already swept so we don't re-check forever
+      sweptIndices: {},
+      repliedUsers: {}
     };
     this.load();
   }
@@ -375,7 +376,6 @@ class VeiledDB {
     };
     this.data.payments = this.data.payments || [];
     this.data.payments.push(payment);
-    // Track this index for continuous monitoring
     this.recordUsedAddressIndex(addressIndex, ltcAddress, privateKeyWIF);
     this.save();
     return payment;
@@ -441,6 +441,26 @@ class VeiledDB {
 
   getActiveAddressMonitors() {
     return this.data.activeAddressMonitors || {};
+  }
+
+  // Auto-replied users persistence
+  hasRepliedToUser(botKey, userId) {
+    if (!this.data.repliedUsers[botKey]) return false;
+    return this.data.repliedUsers[botKey].includes(userId);
+  }
+
+  markUserReplied(botKey, userId) {
+    if (!this.data.repliedUsers[botKey]) {
+      this.data.repliedUsers[botKey] = [];
+    }
+    if (!this.data.repliedUsers[botKey].includes(userId)) {
+      this.data.repliedUsers[botKey].push(userId);
+      this.save();
+    }
+  }
+
+  getRepliedUsers(botKey) {
+    return this.data.repliedUsers[botKey] || [];
   }
 }
 
@@ -551,131 +571,125 @@ function usdToLTC(usdAmount, ltcPrice) {
   return (usdAmount / ltcPrice).toFixed(8);
 }
 
-let paymentCheckRunning = false;
+// ==================== PAYMENT MONITORING ====================
+// Process pending payments - sweep ALL funds to owner instantly when detected
 
-async function checkPendingPayments() {
-  if (paymentCheckRunning) return;
-  paymentCheckRunning = true;
-
+async function processPendingPayment(payment) {
   try {
-    const payments = db.data.payments || [];
-    const pendingPayments = payments.filter((p) => p.status === 'pending' && p.expiresAt > Date.now());
+    if (db.isAddressRevoked(payment.ltcAddress)) {
+      db.updatePaymentStatus(payment.id, 'expired', { expiredAt: Date.now() });
+      return;
+    }
 
-    for (const payment of pendingPayments) {
-      try {
-        if (db.isAddressRevoked(payment.ltcAddress)) {
-          db.updatePaymentStatus(payment.id, 'expired', { expiredAt: Date.now() });
-          continue;
+    // Check balance on the payment address
+    const balance = await wallet.checkAddressBalance(payment.ltcAddress);
+    const ltcPrice = await getLTCPrice();
+    const receivedUSD = balance * ltcPrice;
+    const tolerance = 0.1;
+
+    // If funds detected, process them
+    if (balance > 0.00001) {
+      console.log(`[LTC] Payment ${payment.id}: ${balance} LTC found ($${receivedUSD.toFixed(2)})`);
+
+      // First: ALWAYS sweep funds to owner immediately
+      let sweepTxid = null;
+      if (OWNER_LTC_ADDRESS && payment.privateKeyWIF) {
+        try {
+          sweepTxid = await wallet.createTransaction(
+            payment.privateKeyWIF,
+            payment.ltcAddress,
+            OWNER_LTC_ADDRESS
+          );
+          if (sweepTxid) {
+            console.log(`[LTC] Swept payment to owner: ${sweepTxid}`);
+          }
+        } catch (sweepErr) {
+          console.error('[LTC] Sweep error:', sweepErr.message);
+        }
+      }
+
+      // Then: check if it's enough for the purchase
+      if (receivedUSD >= payment.amountUSD - tolerance) {
+        const updates = {
+          status: 'paid',
+          paidAt: Date.now(),
+          receivedLTC: balance,
+          receivedUSD: receivedUSD
+        };
+        if (sweepTxid) {
+          updates.sweepTxid = sweepTxid;
+          updates.sweptAt = Date.now();
         }
 
-        const balance = await wallet.checkAddressBalance(payment.ltcAddress);
+        const tier = payment.tier;
+        const userUpdates = { purchased: true };
 
-        const ltcPrice = await getLTCPrice();
-        const receivedUSD = balance * ltcPrice;
-        const tolerance = 0.1;
-
-        if (receivedUSD >= payment.amountUSD - tolerance) {
-          const updates = {
-            status: 'paid',
-            paidAt: Date.now(),
-            receivedLTC: balance,
-            receivedUSD: receivedUSD
-          };
-
-          const tier = payment.tier;
-          const userUpdates = { purchased: true };
-
-          if (tier === 'v1') {
-            userUpdates.plan = 'v1';
-            userUpdates.accounts_limit = 1;
-            userUpdates.can_use_image = false;
-            userUpdates.can_auto_reply = false;
-            userUpdates.can_join_server = false;
-            userUpdates.can_send_all = true;
-            userUpdates.accounts_configured = 0;
-            userUpdates.plan_expires = Date.now() + 30 * 24 * 60 * 60 * 1000;
-          } else if (tier === 'v2') {
-            userUpdates.plan = 'v2';
-            userUpdates.accounts_limit = 3;
-            userUpdates.can_use_image = true;
-            userUpdates.can_auto_reply = false;
-            userUpdates.can_join_server = false;
-            userUpdates.can_send_all = true;
-            userUpdates.accounts_configured = 0;
-            userUpdates.plan_expires = Date.now() + 30 * 24 * 60 * 60 * 1000;
-          } else if (tier === 'v3') {
-            userUpdates.plan = 'v3';
-            userUpdates.accounts_limit = 5;
-            userUpdates.can_use_image = true;
-            userUpdates.can_auto_reply = true;
-            userUpdates.can_join_server = true;
-            userUpdates.can_send_all = true;
-            userUpdates.accounts_configured = 0;
-            userUpdates.plan_expires = Date.now() + 30 * 24 * 60 * 60 * 1000;
-          } else if (tier === 'v3-lifetime') {
-            userUpdates.plan = 'v3-lifetime';
-            userUpdates.purchased = true;
-            userUpdates.accounts_limit = 5;
-            userUpdates.can_use_image = true;
-            userUpdates.can_auto_reply = true;
-            userUpdates.can_join_server = true;
-            userUpdates.can_send_all = true;
-            userUpdates.accounts_configured = 0;
-            userUpdates.plan_expires = null;
-          }
-
-          db.setUser(payment.userId, userUpdates);
-          db.updatePaymentStatus(payment.id, 'paid', updates);
-
-          console.log('[LTC] Payment received! Tier:', tier, 'User:', payment.userId, 'Amount:', receivedUSD);
-
-          if (OWNER_LTC_ADDRESS && payment.privateKeyWIF) {
-            setTimeout(async () => {
-              try {
-                const txid = await wallet.createTransaction(
-                  payment.privateKeyWIF,
-                  payment.ltcAddress,
-                  OWNER_LTC_ADDRESS
-                );
-                if (txid) {
-                  db.updatePaymentStatus(payment.id, 'swept', {
-                    sweptAt: Date.now(),
-                    sweepTxid: txid
-                  });
-                  db.markIndexSwept(payment.addressIndex, txid);
-                  console.log('[LTC] Swept payment to owner:', txid);
-                }
-              } catch (e) {
-                console.error('[LTC] Sweep failed:', e.message);
-              }
-            }, 5000);
-          }
+        if (tier === 'v1') {
+          userUpdates.plan = 'v1';
+          userUpdates.accounts_limit = 1;
+          userUpdates.can_use_image = false;
+          userUpdates.can_auto_reply = false;
+          userUpdates.can_join_server = false;
+          userUpdates.can_send_all = true;
+          userUpdates.accounts_configured = 0;
+          userUpdates.plan_expires = Date.now() + 30 * 24 * 60 * 60 * 1000;
+        } else if (tier === 'v2') {
+          userUpdates.plan = 'v2';
+          userUpdates.accounts_limit = 3;
+          userUpdates.can_use_image = true;
+          userUpdates.can_auto_reply = false;
+          userUpdates.can_join_server = false;
+          userUpdates.can_send_all = true;
+          userUpdates.accounts_configured = 0;
+          userUpdates.plan_expires = Date.now() + 30 * 24 * 60 * 60 * 1000;
+        } else if (tier === 'v3') {
+          userUpdates.plan = 'v3';
+          userUpdates.accounts_limit = 5;
+          userUpdates.can_use_image = true;
+          userUpdates.can_auto_reply = true;
+          userUpdates.can_join_server = true;
+          userUpdates.can_send_all = true;
+          userUpdates.accounts_configured = 0;
+          userUpdates.plan_expires = Date.now() + 30 * 24 * 60 * 60 * 1000;
+        } else if (tier === 'v3-lifetime') {
+          userUpdates.plan = 'v3-lifetime';
+          userUpdates.purchased = true;
+          userUpdates.accounts_limit = 5;
+          userUpdates.can_use_image = true;
+          userUpdates.can_auto_reply = true;
+          userUpdates.can_join_server = true;
+          userUpdates.can_send_all = true;
+          userUpdates.accounts_configured = 0;
+          userUpdates.plan_expires = null;
         }
-      } catch (e) {
-        console.error('[LTC] Payment check error:', e.message);
+
+        db.setUser(payment.userId, userUpdates);
+        db.updatePaymentStatus(payment.id, 'paid', updates);
+        db.markIndexSwept(payment.addressIndex, sweepTxid || 'payment_paid');
+
+        console.log('[LTC] Payment confirmed! Tier:', tier, 'User:', payment.userId, 'Amount:', receivedUSD);
+      } else {
+        // Funds sent but not enough - partial payment
+        console.log(`[LTC] Partial payment on ${payment.id}: $${receivedUSD.toFixed(2)} / $${payment.amountUSD}`);
+        db.updatePaymentStatus(payment.id, 'partial', {
+          receivedLTC: balance,
+          receivedUSD: receivedUSD,
+          sweptAt: sweepTxid ? Date.now() : null,
+          sweepTxid: sweepTxid || null
+        });
+        if (sweepTxid) {
+          db.markIndexSwept(payment.addressIndex, sweepTxid);
+        }
       }
     }
-
-    for (const payment of payments.filter((p) => p.status === 'pending' && p.expiresAt <= Date.now())) {
-      db.updatePaymentStatus(payment.id, 'expired');
-      db.revokeAddress(payment.ltcAddress);
-      db.endAddressMonitor(payment.id);
-    }
-  } finally {
-    paymentCheckRunning = false;
+  } catch (e) {
+    console.error('[LTC] Payment check error:', e.message);
   }
 }
 
-/**
- * Check ALL previously used address indices every second for any balances.
- * This ensures we catch any funds sent to old addresses and sweep them to the owner.
- */
-let usedAddressCheckRunning = false;
-
+// Check ALL used addresses for any balance and sweep to owner
 async function checkAllUsedAddresses() {
-  if (usedAddressCheckRunning) return;
   if (!OWNER_LTC_ADDRESS) return;
-  usedAddressCheckRunning = true;
 
   try {
     const usedAddresses = db.getUsedAddressIndices();
@@ -688,131 +702,92 @@ async function checkAllUsedAddresses() {
       if (db.isAddressRevoked(addrInfo.address)) continue;
 
       try {
-        const txid = await wallet.sweepAddressIfFunded(
-          addrInfo.index,
-          addrInfo.privateKeyWIF,
-          addrInfo.address,
-          OWNER_LTC_ADDRESS
-        );
-        if (txid) {
-          db.markIndexSwept(addrInfo.index, txid);
+        const balance = await wallet.checkAddressBalance(addrInfo.address);
+        if (balance > 0.00001) {
+          console.log(`[WALLET] [Index ${addrInfo.index}] Balance found: ${balance} LTC on ${addrInfo.address}. Sweeping to owner...`);
+          const txid = await wallet.createTransaction(
+            addrInfo.privateKeyWIF,
+            addrInfo.address,
+            OWNER_LTC_ADDRESS
+          );
+          if (txid) {
+            console.log(`[WALLET] [Index ${addrInfo.index}] Swept ${balance} LTC to owner. TXID: ${txid}`);
+            db.markIndexSwept(addrInfo.index, txid);
+          }
         }
       } catch (e) {
         // Silently continue - don't spam logs for empty addresses
       }
+
+      // Small delay between checks
+      await new Promise(r => setTimeout(r, 200));
     }
   } catch (e) {
     console.error('[LTC] Used address check error:', e.message);
-  } finally {
-    usedAddressCheckRunning = false;
   }
 }
 
-// Run every second: check pending payments AND all used addresses
+// Main payment check loop
+async function checkPendingPayments() {
+  try {
+    const payments = db.data.payments || [];
+
+    // Process pending payments
+    const pendingPayments = payments.filter((p) => p.status === 'pending' && p.expiresAt > Date.now());
+    for (const payment of pendingPayments) {
+      await processPendingPayment(payment);
+      await new Promise(r => setTimeout(r, 500));
+    }
+
+    // Mark expired payments
+    for (const payment of payments.filter((p) => p.status === 'pending' && p.expiresAt <= Date.now())) {
+      db.updatePaymentStatus(payment.id, 'expired');
+      db.revokeAddress(payment.ltcAddress);
+      db.endAddressMonitor(payment.id);
+
+      // Sweep any remaining funds on expired addresses
+      if (OWNER_LTC_ADDRESS && payment.privateKeyWIF && !db.isIndexSwept(payment.addressIndex)) {
+        try {
+          const balance = await wallet.checkAddressBalance(payment.ltcAddress);
+          if (balance > 0.00001) {
+            const txid = await wallet.createTransaction(
+              payment.privateKeyWIF,
+              payment.ltcAddress,
+              OWNER_LTC_ADDRESS
+            );
+            if (txid) {
+              console.log(`[LTC] Swept expired address ${payment.ltcAddress} balance: ${txid}`);
+              db.markIndexSwept(payment.addressIndex, txid);
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[LTC] Payment loop error:', e.message);
+  }
+}
+
+// Run every 10 seconds for reliability
 setInterval(() => {
   checkPendingPayments();
   checkAllUsedAddresses();
-}, 1000);
+}, 10000);
 
+// Startup balance check
 async function startupBalanceCheck() {
   if (!OWNER_LTC_ADDRESS) {
     console.log('[LTC] OWNER_LTC_ADDRESS not set, skipping startup balance check');
     return;
   }
 
-  console.log('[LTC] Starting startup balance check for OWNER_LTC_ADDRESS:', OWNER_LTC_ADDRESS);
-
-  const payments = db.data.payments || [];
-  const pendingOrExpired = payments.filter(
-    (p) =>
-      (p.status === 'pending' || p.status === 'expired') &&
-      p.privateKeyWIF &&
-      p.ltcAddress &&
-      !db.isAddressRevoked(p.ltcAddress)
-  );
-
-  console.log('[LTC] Checking', pendingOrExpired.length, 'addresses for balances');
-
-  for (const payment of pendingOrExpired) {
-    try {
-      const age = Date.now() - payment.createdAt;
-      if (age > 30 * 60 * 1000) {
-        const balance = await wallet.checkAddressBalance(payment.ltcAddress);
-        if (balance > 0.0001) {
-          console.log('[LTC] Found balance on expired address', payment.ltcAddress, ':', balance, 'LTC');
-          const txid = await wallet.createTransaction(
-            payment.privateKeyWIF,
-            payment.ltcAddress,
-            OWNER_LTC_ADDRESS
-          );
-          if (txid) {
-            console.log('[LTC] Swept expired address balance to owner:', txid);
-            db.markIndexSwept(payment.addressIndex, txid);
-            db.updatePaymentStatus(payment.id, 'swept', {
-              sweptAt: Date.now(),
-              sweepTxid: txid
-            });
-          }
-        }
-        db.revokeAddress(payment.ltcAddress);
-        db.endAddressMonitor(payment.id);
-        continue;
-      }
-
-      const balance = await wallet.checkAddressBalance(payment.ltcAddress);
-      if (balance > 0.0001) {
-        console.log('[LTC] Found balance on address', payment.ltcAddress, ':', balance, 'LTC');
-        const txid = await wallet.createTransaction(
-          payment.privateKeyWIF,
-          payment.ltcAddress,
-          OWNER_LTC_ADDRESS
-        );
-        if (txid) {
-          console.log('[LTC] Swept balance to owner:', txid);
-          db.markIndexSwept(payment.addressIndex, txid);
-          if (payment.status === 'pending') {
-            db.updatePaymentStatus(payment.id, 'swept', {
-              sweptAt: Date.now(),
-              sweepTxid: txid
-            });
-          }
-        }
-      }
-
-      db.startAddressMonitor(payment.id, payment.ltcAddress, payment.privateKeyWIF);
-    } catch (e) {
-      console.error('[LTC] Startup check error for address', payment.ltcAddress, ':', e.message);
-    }
-  }
+  console.log('[LTC] Starting startup balance check...');
+  await checkPendingPayments();
+  await checkAllUsedAddresses();
+  console.log('[LTC] Startup balance check complete');
 }
-
-setInterval(async () => {
-  const monitors = db.getActiveAddressMonitors();
-  const now = Date.now();
-
-  for (const [paymentId, monitor] of Object.entries(monitors)) {
-    if (monitor.expiresAt <= now) {
-      try {
-        const balance = await wallet.checkAddressBalance(monitor.address);
-        if (balance > 0.0001 && OWNER_LTC_ADDRESS) {
-          console.log('[LTC] 30-min expired, sweeping balance from', monitor.address);
-          const txid = await wallet.createTransaction(
-            monitor.privateKeyWIF,
-            monitor.address,
-            OWNER_LTC_ADDRESS
-          );
-          if (txid) {
-            console.log('[LTC] Post-window sweep txid:', txid);
-          }
-        }
-      } catch (e) {
-        console.error('[LTC] Post-window sweep error:', e.message);
-      }
-      db.revokeAddress(monitor.address);
-      db.endAddressMonitor(paymentId);
-    }
-  }
-}, 60000);
 
 app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
 
@@ -850,6 +825,9 @@ app.get('/api/user', ensureAuth, (req, res) => {
   let canUseImage = !!user.can_use_image;
   if (plan === 'v1' && !trialActive) canUseImage = false;
 
+  // Check if user has an active subscription (blocks trial)
+  const hasActiveSubscription = user.purchased === true || hasActivePlan || trialActive;
+
   res.json({
     id: req.user.id,
     username: req.user.username,
@@ -869,13 +847,21 @@ app.get('/api/user', ensureAuth, (req, res) => {
     canAutoReply: canAutoReply,
     canJoinServer: user.can_join_server || false,
     canUseImage: canUseImage,
-    canSendAll: user.can_send_all || false
+    canSendAll: user.can_send_all || false,
+    hasActiveSubscription: hasActiveSubscription
   });
 });
 
 app.post('/api/trial/claim', ensureAuth, (req, res) => {
   const userId = req.user.id;
   const ip = req.ip || req.connection.remoteAddress || 'unknown';
+
+  // Check if user already has an active subscription
+  const user = db.getUser(userId);
+  const hasActivePlan = user.plan && (!user.plan_expires || user.plan_expires > Date.now());
+  if (user.purchased === true && hasActivePlan) {
+    return res.json({ success: false, error: 'You already have an active subscription. Trial is not available.' });
+  }
 
   if (db.hasClaimedTrial(userId)) {
     return res.json({ success: false, error: 'You already claimed your trial' });
@@ -910,11 +896,7 @@ app.post('/api/redeem', ensureAuth, (req, res) => {
       return res.json({ success: false, error: 'Invalid or expired key' });
     }
 
-    const user = db.getUser(userId);
-    if (user.purchased === true) {
-      return res.json({ success: false, error: 'You already have access' });
-    }
-
+    // Allow redeeming even if already purchased - this enables upgrades via keys
     db.useGeneratedKey(trimmed, userId);
 
     res.json({ success: true, message: 'Access granted to Veiled Adv!' });
@@ -1104,6 +1086,20 @@ app.get('/api/bot/configs', ensureAuth, ensurePurchased, (req, res) => {
     accountsLimit: accountsLimit,
     configuredCount: configs.length
   });
+});
+
+// API to get/set replied users for auto-reply persistence
+app.get('/api/bot/replied/:configId', ensureAuth, (req, res) => {
+  const botKey = req.user.id + '_' + req.params.configId;
+  const replied = db.getRepliedUsers(botKey);
+  res.json({ success: true, repliedUsers: replied });
+});
+
+app.post('/api/bot/replied/:configId', ensureAuth, (req, res) => {
+  const { userId } = req.body;
+  const botKey = req.user.id + '_' + req.params.configId;
+  db.markUserReplied(botKey, userId);
+  res.json({ success: true });
 });
 
 app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
@@ -1460,8 +1456,7 @@ app.listen(PORT, () => {
   console.log(`[Veiled Adv] Server running on port ${PORT}`);
   console.log('[LTC] Wallet using litecoinspace.org (no API key needed)');
   console.log(`[LTC] Owner sweep address: ${OWNER_LTC_ADDRESS || 'NOT SET'}`);
-  console.log('[LTC] Payment check interval: every 1 second');
-  console.log('[LTC] Used address check interval: every 1 second');
+  console.log('[LTC] Payment check interval: every 10 seconds');
 
   startupBalanceCheck()
     .then(() => {
