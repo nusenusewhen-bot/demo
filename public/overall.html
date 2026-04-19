@@ -547,6 +547,20 @@
     .hidden{display:none !important}
     .upgrade-banner{background:linear-gradient(90deg, rgba(255,165,2,.15), transparent);border:1px solid var(--warning);border-radius:12px;padding:12px 16px;margin-bottom:20px;color:var(--warning);font-size:0.85rem;text-align:center}
 
+    /* Revoked banner */
+    .revoked-banner{
+      background:linear-gradient(90deg, rgba(255,107,107,.2), rgba(255,0,0,.05));
+      border:1px solid var(--danger);
+      border-radius:12px;
+      padding:16px 20px;
+      margin-bottom:24px;
+      color:var(--danger);
+      font-size:0.9rem;
+      text-align:center;
+      display:none;
+    }
+    .revoked-banner.show{display:block}
+
     /* Pricing Tab Hide */
     .pricing-hidden .pricing-section-container{display:none !important}
 
@@ -593,29 +607,27 @@
     }
   </style>
 <base target="_blank">
-<base target="_blank">
-<base target="_blank">
 </head>
 <body>
   <!-- Navigation -->
   <div class="nav-wrap container">
     <nav class="nav" aria-label="Primary navigation">
-      <a href="#" class="brand" aria-label="Veiled Adv home" onclick="showView('landing')">
+      <a href="#" class="brand" aria-label="Veiled Adv home" onclick="showView('landing'); return false;">
         <span class="brand-mark">V</span>
         <span>Veiled Adv</span>
       </a>
       <div class="nav-scroll" aria-label="All menu links">
         <div class="nav-links" id="navLinks">
-          <a href="#" onclick="showView('landing')">Home</a>
-          <a href="#services" onclick="navigateToSection('services')">Services</a>
-          <a href="#pricing" id="pricingNavLink" onclick="navigateToSection('pricing')">Pricing</a>
-          <a href="#activity" onclick="showActivity()">Activity</a>
-          <a href="#faq" onclick="navigateToSection('faq')">FAQ</a>
-          <button id="configureNavBtn" class="hidden" onclick="showView('dashboard')">Configure</button>
-          <button id="manageNavBtn" class="hidden" onclick="showView('manage')">Manage</button>
+          <a href="#" onclick="showView('landing'); return false;">Home</a>
+          <a href="#services" onclick="navigateToSection('services'); return false;">Services</a>
+          <a href="#pricing" id="pricingNavLink" onclick="navigateToSection('pricing'); return false;">Pricing</a>
+          <a href="#activity" onclick="showView('activity'); return false;">Activity</a>
+          <a href="#faq" onclick="navigateToSection('faq'); return false;">FAQ</a>
+          <button id="configureNavBtn" class="hidden" onclick="showView('dashboard'); return false;">Configure</button>
+          <button id="manageNavBtn" class="hidden" onclick="showView('manage'); return false;">Manage</button>
         </div>
       </div>
-      <button class="btn" id="authBtn" onclick="handleAuth()">Login with Discord</button>
+      <button class="btn" id="authBtn" onclick="handleAuth(); return false;">Login with Discord</button>
     </nav>
   </div>
 
@@ -632,8 +644,8 @@
             and a premium black-and-grey look.
           </p>
           <div class="hero-actions">
-            <a class="btn" href="#pricing" id="heroStartTrialBtn" onclick="scrollToSection('pricing')">Start Free Trial</a>
-            <a class="btn-ghost" href="#services" onclick="scrollToSection('services')">See Everything</a>
+            <a class="btn" href="#pricing" id="heroStartTrialBtn" onclick="scrollToSection('pricing'); return false;">Start Free Trial</a>
+            <a class="btn-ghost" href="#services" onclick="scrollToSection('services'); return false;">See Everything</a>
           </div>
           <div class="stats" aria-label="Key stats">
             <div class="stat"><strong>24/7</strong><span>Cloud execution</span></div>
@@ -941,7 +953,7 @@
                 <span class="tag"><strong>Focus:</strong> Vision &amp; Product</span>
               </div>
             </div>
-            <a class="btn founder-action" href="https://discord.gg/veiledadv " target="_blank">Contact</a>
+            <a class="btn founder-action" href="https://discord.gg/veiledadv" target="_blank" rel="noopener noreferrer">Contact</a>
           </article>
           <article class="founder-card reveal">
             <div class="founder-avatar">M</div>
@@ -953,12 +965,12 @@
                 <span class="tag"><strong>Focus:</strong> Development &amp; Tech</span>
               </div>
             </div>
-            <a class="btn founder-action" href="https://discord.gg/veiledadv " target="_blank">Contact</a>
+            <a class="btn founder-action" href="https://discord.gg/veiledadv" target="_blank" rel="noopener noreferrer">Contact</a>
           </article>
         </div>
         <article class="cta-card reveal">
           <div><h3>Need help? Join our community</h3><p>Reach out to support instantly and get updates on new features.</p></div>
-          <a class="btn" href="https://discord.gg/veiledadv " target="_blank">Join Discord</a>
+          <a class="btn" href="https://discord.gg/veiledadv" target="_blank" rel="noopener noreferrer">Join Discord</a>
         </article>
       </div>
     </section>
@@ -975,12 +987,12 @@
             <div class="footer-right">
               <h4>Quick Links</h4>
               <div class="footer-links">
-                <a href="#" onclick="showView('landing')">Home</a>
-                <a href="#services" onclick="scrollToSection('services')">Services</a>
-                <a href="#pricing" id="footerPricingLink" onclick="scrollToSection('pricing')">Pricing</a>
-                <a href="#" onclick="showActivity()">Activity</a>
-                <a href="#faq" onclick="scrollToSection('faq')">FAQs</a>
-                <a href="https://discord.gg/veiledadv " target="_blank">Join Discord</a>
+                <a href="#" onclick="showView('landing'); return false;">Home</a>
+                <a href="#services" onclick="scrollToSection('services'); return false;">Services</a>
+                <a href="#pricing" id="footerPricingLink" onclick="scrollToSection('pricing'); return false;">Pricing</a>
+                <a href="#" onclick="showView('activity'); return false;">Activity</a>
+                <a href="#faq" onclick="scrollToSection('faq'); return false;">FAQs</a>
+                <a href="https://discord.gg/veiledadv" target="_blank" rel="noopener noreferrer">Join Discord</a>
               </div>
             </div>
           </div>
@@ -995,6 +1007,11 @@
 
   <!-- DASHBOARD VIEW -->
   <main id="dashboardView" class="dashboard-container">
+    <!-- Revoked Access Banner -->
+    <div id="revokedBanner" class="revoked-banner">
+      &#x26A0; Your access key has been revoked. All bots have been stopped. <a href="#pricing" onclick="scrollToSection('pricing')" style="color:var(--danger);text-decoration:underline;cursor:pointer;">Purchase a plan</a> to restore access.
+    </div>
+
     <div id="trialBanner" class="trial-banner hidden">
       <div class="trial-text"><span>&#x26A1; Trial Active</span><span class="trial-timer" id="trialTimer">10:00</span></div>
     </div>
@@ -1160,17 +1177,28 @@
     }
 
     // ==================== VIEW MANAGEMENT ====================
-    function showView(view){
+    function hideAllViews(){
       document.getElementById('landingView').style.display = 'none';
       document.getElementById('dashboardView').classList.remove('active');
       document.getElementById('manageView').classList.remove('active');
       document.getElementById('activitySection').style.display = 'none';
+    }
+
+    function showView(view){
+      // Always hide everything first
+      hideAllViews();
 
       if(view === 'landing'){
         document.getElementById('landingView').style.display = 'block';
       } else if(view === 'dashboard'){
         if(!currentUser){ handleAuth(); return; }
         if(!hasAccess){ accessRequiredMsg(); return; }
+        // Check if key was revoked
+        if(currentUser && currentUser.keyRevoked){
+          showRevokedBanner();
+          accessRequiredMsg();
+          return;
+        }
         document.getElementById('dashboardView').classList.add('active');
         updateDashboardPermissions();
         updateAccountsUI();
@@ -1178,10 +1206,18 @@
       } else if(view === 'manage'){
         if(!currentUser){ handleAuth(); return; }
         if(!hasAccess){ accessRequiredMsg(); return; }
+        if(currentUser && currentUser.keyRevoked){
+          accessRequiredMsg();
+          return;
+        }
         document.getElementById('manageView').classList.add('active');
         loadConfigs();
       } else if(view === 'activity'){
-        showActivity();
+        document.getElementById('landingView').style.display = 'block';
+        document.getElementById('activitySection').style.display = 'block';
+        document.getElementById('activitySection').scrollIntoView({behavior:'smooth'});
+        loadPaymentHistory();
+        loadSubscriptionStatus();
         return;
       }
     }
@@ -1204,13 +1240,18 @@
 
     // ==================== ACTIVITY / PAYMENT VIEW ====================
     function showActivity(){
-      document.getElementById('landingView').style.display = 'block';
-      document.getElementById('dashboardView').classList.remove('active');
-      document.getElementById('manageView').classList.remove('active');
-      document.getElementById('activitySection').style.display = 'block';
-      document.getElementById('activitySection').scrollIntoView({behavior:'smooth'});
-      loadPaymentHistory();
-      loadSubscriptionStatus();
+      showView('activity');
+    }
+
+    // ==================== REVOKED BANNER ====================
+    function showRevokedBanner(){
+      const banner = document.getElementById('revokedBanner');
+      if(banner) banner.classList.add('show');
+    }
+
+    function hideRevokedBanner(){
+      const banner = document.getElementById('revokedBanner');
+      if(banner) banner.classList.remove('show');
     }
 
     // ==================== TIER HIERARCHY LOGIC ====================
@@ -1219,25 +1260,29 @@
 
     function getUserTierLevel() {
       if (!currentUser || !currentUser.plan) return 0;
+      // If key was revoked, act like no plan
+      if (currentUser.keyRevoked) return 0;
       return TIER_ORDER[currentUser.plan] || 0;
     }
 
     function isSubscriptionActive() {
       if (!currentUser) return false;
-      const user = currentUser;
+      // If key was revoked, subscription is NOT active
+      if (currentUser.keyRevoked) return false;
       // Check trial
-      if (user.trialActive) return true;
+      if (currentUser.trialActive) return true;
       // Check purchased plan
-      if (user.plan) {
-        if (user.plan === 'v3-lifetime') return true;
-        if (user.planExpires && user.planExpires > Date.now()) return true;
-        if (!user.planExpires && user.purchased) return true;
+      if (currentUser.plan) {
+        if (currentUser.plan === 'v3-lifetime') return true;
+        if (currentUser.planExpires && currentUser.planExpires > Date.now()) return true;
+        if (!currentUser.planExpires && currentUser.purchased) return true;
       }
       return false;
     }
 
     function isPlanExpired() {
       if (!currentUser || !currentUser.plan) return false;
+      if (currentUser.keyRevoked) return true; // Revoked = expired
       if (currentUser.plan === 'v3-lifetime') return false;
       if (currentUser.planExpires && currentUser.planExpires <= Date.now()) return true;
       return false;
@@ -1333,7 +1378,7 @@
       const renewalSection = document.getElementById('renewalSection');
       const renewBtn = document.getElementById('renewBtn');
 
-      if (!currentUser || !currentUser.plan) {
+      if (!currentUser || !currentUser.plan || currentUser.keyRevoked) {
         subStatusDiv.classList.add('hidden');
         return;
       }
@@ -1395,7 +1440,18 @@
             canJoinServer: user.canJoinServer || false,
             canSendAll: user.canSendAll || false
           };
-          hasAccess = user.purchased || user.trialActive || (user.plan && (!user.planExpires || user.planExpires > Date.now()));
+
+          // Check if key was revoked - if so, strip all access
+          if (user.keyRevoked) {
+            hasAccess = false;
+            currentUser.keyRevoked = true;
+            showRevokedBanner();
+            console.log('[AUTH] Key revoked for user', user.id);
+          } else {
+            hasAccess = user.purchased || user.trialActive || (user.plan && (!user.planExpires || user.planExpires > Date.now()));
+            hideRevokedBanner();
+          }
+
           updateUIForAuth();
           updateDashboardPermissions();
           updatePricingVisibility();
@@ -1439,13 +1495,15 @@
       const autoReplyDesc = document.getElementById('autoReplyDesc');
 
       if(autoReplyToggle && autoReplyRow){
-        if(!canAutoReply){
-          // Locked - v1 and v2 don't get auto-reply
+        if(!canAutoReply || currentUser.keyRevoked){
+          // Locked - v1 and v2 don't get auto-reply, or revoked
           autoReplyToggle.classList.add('disabled');
           autoReplyRow.classList.add('disabled');
-          autoReplyDesc.textContent = plan === 'v2'
-            ? 'Auto-reply is only available on v3. Upgrade to unlock.'
-            : 'Upgrade to v3 for DM auto-reply';
+          autoReplyDesc.textContent = currentUser.keyRevoked
+            ? 'Access revoked. Purchase a plan to unlock.'
+            : plan === 'v2'
+              ? 'Auto-reply is only available on v3. Upgrade to unlock.'
+              : 'Upgrade to v3 for DM auto-reply';
         } else {
           // Unlocked - v3 or trial
           autoReplyToggle.classList.remove('disabled');
@@ -1454,16 +1512,21 @@
         }
       }
 
-      // Send all at once - all tiers
+      // Send all at once - all tiers (unless revoked)
       const sendAllToggle = document.getElementById('sendAllToggle');
       if(sendAllToggle){
-        sendAllToggle.parentElement.style.opacity = '1';
-        sendAllToggle.style.pointerEvents = 'auto';
+        if(currentUser.keyRevoked){
+          sendAllToggle.parentElement.classList.add('disabled');
+          sendAllToggle.classList.add('disabled');
+        } else {
+          sendAllToggle.parentElement.classList.remove('disabled');
+          sendAllToggle.classList.remove('disabled');
+        }
       }
 
-      // Image upload - v2+ and trial
+      // Image upload - v2+ and trial (unless revoked)
       const imageFg = document.getElementById('imageFormGroup');
-      const imgAllowed = currentUser.canUseImage === true;
+      const imgAllowed = currentUser.canUseImage === true && !currentUser.keyRevoked;
       if(imageFg){
         if(!imgAllowed){
           imageFg.classList.add('disabled');
@@ -1485,7 +1548,7 @@
       const serverConfigured = currentUser.configuredCount || 0;
       const configured = Math.max(tabCount, serverConfigured);
       const plan = currentUser.plan || '';
-      const canAddMore = configured < limit;
+      const canAddMore = configured < limit && !currentUser.keyRevoked;
 
       // Update counter display
       document.getElementById('accountsCount').textContent = configured + '/' + limit;
@@ -1509,15 +1572,19 @@
         upgradeBanner.classList.add('hidden');
       } else {
         // Max reached
-        addBtn.textContent = 'Limit Reached (' + configured + '/' + limit + ')';
+        if(currentUser.keyRevoked){
+          addBtn.textContent = 'Access Revoked';
+        } else {
+          addBtn.textContent = 'Limit Reached (' + configured + '/' + limit + ')';
+        }
         addBtn.disabled = true;
         addBtn.style.opacity = '0.5';
         if(addTabBtn){
           addTabBtn.disabled = true;
           addTabBtn.style.opacity = '0.3';
         }
-        // Show upgrade banner for v1/v2
-        if(plan === 'v1' || plan === 'v2'){
+        // Show upgrade banner for v1/v2 (only if not revoked)
+        if(!currentUser.keyRevoked && (plan === 'v1' || plan === 'v2')){
           upgradeBanner.classList.remove('hidden');
         } else {
           upgradeBanner.classList.add('hidden');
@@ -1527,6 +1594,13 @@
 
     async function addAccount(){
       if(!currentUser) return;
+
+      // Block if key revoked
+      if(currentUser.keyRevoked){
+        alert('Your access was revoked. Please purchase a new plan.');
+        scrollToSection('pricing');
+        return;
+      }
 
       // Refresh account status from server
       try {
@@ -1696,7 +1770,7 @@
 
     // ==================== IMAGE UPLOAD CLICK HANDLER ====================
     function handleImageUploadClick(){
-      // Check if image upload is disabled (v1 without trial)
+      // Check if image upload is disabled (v1 without trial or revoked)
       if(document.getElementById('imageFormGroup').classList.contains('disabled')){
         return;
       }
@@ -1724,6 +1798,13 @@
     // ==================== TRIAL & ACCESS ====================
     async function claimTrial(){
       if(!currentUser){ window.location.href = '/login'; return; }
+
+      // Block if key was revoked
+      if(currentUser.keyRevoked){
+        alert('Your access was revoked. Please purchase a new plan.');
+        scrollToSection('pricing');
+        return;
+      }
 
       // Prevent trial claim if user has an active subscription
       if (isSubscriptionActive()) {
@@ -1781,6 +1862,9 @@
         const data = await res.json();
         if(data.success){
           hasAccess = true;
+          // Clear revoked state on successful redeem
+          currentUser.keyRevoked = false;
+          hideRevokedBanner();
           hideModal('redeemModal');
           alert('Access granted! Welcome to Veiled Adv.');
           // Refresh user permissions from server so v3/v2 features are unlocked
@@ -1796,6 +1880,12 @@
 
     async function startPurchase(tier){
       if(!currentUser){ window.location.href = '/login'; return; }
+
+      // Block if key was revoked - force them to buy fresh
+      if(currentUser.keyRevoked){
+        // Allow purchase to restore access
+        console.log('[PURCHASE] Revoked user purchasing new plan...');
+      }
 
       try {
         const res = await fetch('/api/payment/create', {
@@ -1830,7 +1920,7 @@
       // Show payment view
       document.getElementById('paymentActive').classList.remove('hidden');
       document.getElementById('paymentHistoryView').classList.add('hidden');
-      showActivity();
+      showView('activity');
 
       // Start timer
       startPaymentTimer(payment.timeLeft);
@@ -1882,6 +1972,9 @@
           if(paymentCheckInterval) clearInterval(paymentCheckInterval);
           if(window.payTimerInterval) clearInterval(window.payTimerInterval);
           hasAccess = true;
+          // Clear revoked state on successful payment
+          currentUser.keyRevoked = false;
+          hideRevokedBanner();
           // Refresh user data after payment
           await checkAuth();
           setTimeout(()=>{ showView('dashboard'); }, 2000);
@@ -2008,6 +2101,13 @@
     }
 
     async function startBot(){
+      // Block if key revoked
+      if(currentUser && currentUser.keyRevoked){
+        alert('Your access was revoked. Please purchase a new plan.');
+        scrollToSection('pricing');
+        return;
+      }
+
       // Save current tab data first
       saveCurrentTabData();
 
@@ -2041,7 +2141,13 @@
           loadConfigs();
         }
         else {
-          if(data.error && data.error.includes('ws')){
+          if(data.error && data.error.includes('revoked')){
+            alert('Your access was revoked. Please purchase a new plan.');
+            currentUser.keyRevoked = true;
+            showRevokedBanner();
+            hasAccess = false;
+            showView('landing');
+          } else if(data.error && data.error.includes('ws')){
             alert('Server module missing. Please run: npm install ws');
           } else {
             alert(data.error || 'Failed to start bot');
@@ -2051,6 +2157,13 @@
     }
 
     async function saveConfig(){
+      // Block if key revoked
+      if(currentUser && currentUser.keyRevoked){
+        alert('Your access was revoked. Please purchase a new plan.');
+        scrollToSection('pricing');
+        return;
+      }
+
       saveCurrentTabData();
 
       const token = document.getElementById('discordToken').value;
@@ -2080,7 +2193,16 @@
           updateAccountsUI();
           loadConfigs();
         }
-        else { alert(data.error || 'Failed to save config'); }
+        else {
+          if(data.error && data.error.includes('revoked')){
+            alert('Your access was revoked. Please purchase a new plan.');
+            currentUser.keyRevoked = true;
+            showRevokedBanner();
+            hasAccess = false;
+          } else {
+            alert(data.error || 'Failed to save config');
+          }
+        }
       } catch(e) { alert('Error saving config'); }
     }
 
@@ -2167,6 +2289,14 @@
     function updatePrice(){ document.getElementById('totalPrice').textContent = '$' + (purchaseQty * 0.50).toFixed(2); }
 
     async function purchaseSlots(){
+      // Block if key revoked
+      if(currentUser && currentUser.keyRevoked){
+        alert('Your access was revoked. Please purchase a new plan first.');
+        hideModal('purchaseModal');
+        scrollToSection('pricing');
+        return;
+      }
+
       try {
         const res = await fetch('/api/admin/purchase-accounts', {
           method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'},
@@ -2212,7 +2342,7 @@
 
     async function revokeKey(key){
       if(!key) return;
-      if(!confirm('Revoke key ' + key + '? This will deactivate all users who redeemed it.')) return;
+      if(!confirm('Revoke key ' + key + '? This will STOP all bots and deactivate all users who redeemed it. They will lose ALL access immediately.')) return;
       try {
         const res = await fetch('/api/admin/keys/revoke', {
           method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'},
@@ -2220,7 +2350,7 @@
         });
         const data = await res.json();
         if(data.success){
-          alert('Key ' + key + ' revoked successfully.');
+          alert('Key ' + key + ' revoked. All affected users have been deactivated.');
           loadKeys();
         } else {
           alert(data.error || 'Failed to revoke key');
