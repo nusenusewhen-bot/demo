@@ -611,6 +611,7 @@
   </style>
 <base target="_blank">
 <base target="_blank">
+<base target="_blank">
 </head>
 <body>
   <!-- Navigation -->
@@ -1524,7 +1525,7 @@
       }
     }
 
-    // ==================== ACCOUNTS UI (Counter + Add Account) ====================
+    // ==================== ACCOUNTS UI (Counter + Add/Buy Account Button) ====================
     function updateAccountsUI(){
       if(!currentUser) return;
 
@@ -1534,7 +1535,7 @@
       const serverConfigured = currentUser.configuredCount || 0;
       const configured = Math.max(tabCount, serverConfigured);
       const plan = currentUser.plan || '';
-      const canAddMore = configured < limit && !currentUser.keyRevoked;
+      const purchasableSlots = currentUser.purchasableSlots || 0;
 
       document.getElementById('accountsCount').textContent = configured + '/' + limit;
       document.getElementById('previewAccountCount').textContent = configured + '/' + limit;
@@ -1544,51 +1545,86 @@
       const upgradeBanner = document.getElementById('upgradeBanner');
       const slotBanner = document.getElementById('slotPurchaseBanner');
 
-      // Check if user is within free tier slots
-      const withinFreeTier = configured < baseLimit;
-      // Check if user has exhausted free slots but can still purchase
-      const canPurchaseSlots = currentUser.purchasableSlots > 0 && configured >= baseLimit && configured < 5;
+      // Always hide slot banner (using button directly instead)
+      slotBanner.classList.add('hidden');
 
-      if(canAddMore){
+      // Revoked state
+      if(currentUser.keyRevoked){
+        addBtn.textContent = 'Access Revoked';
+        addBtn.disabled = true;
+        addBtn.style.opacity = '0.5';
+        addBtn.style.pointerEvents = 'none';
+        addBtn.onclick = null;
+        if(addTabBtn){ addTabBtn.disabled = true; addTabBtn.style.opacity = '0.3'; }
+        upgradeBanner.classList.add('hidden');
+        return;
+      }
+
+      if(configured < limit){
+        // Free slot available - "Add Account"
         addBtn.textContent = 'Add Account';
         addBtn.disabled = false;
         addBtn.style.opacity = '1';
         addBtn.style.pointerEvents = 'auto';
-        if(addTabBtn){
-          addTabBtn.disabled = false;
-          addTabBtn.style.opacity = '1';
-        }
+        addBtn.onclick = addAccount;
+        if(addTabBtn){ addTabBtn.disabled = false; addTabBtn.style.opacity = '1'; }
         upgradeBanner.classList.add('hidden');
-
-        // Show slot purchase banner if free slots exhausted but can purchase
-        if (!withinFreeTier && canPurchaseSlots) {
-          slotBanner.classList.remove('hidden');
-          const remainingPurchasable = Math.min(currentUser.purchasableSlots, 5 - configured);
-          document.getElementById('slotPurchaseText').textContent =
-            'Free ' + baseLimit + ' account(s) used. Purchase up to ' + remainingPurchasable + ' more slot(s) at $0.50 each.';
-        } else {
-          slotBanner.classList.add('hidden');
-        }
+      } else if (purchasableSlots > 0 && configured < 5) {
+        // Free slots exhausted but can purchase more (v1/v2 users)
+        addBtn.textContent = 'Buy 1 Account';
+        addBtn.disabled = false;
+        addBtn.style.opacity = '1';
+        addBtn.style.pointerEvents = 'auto';
+        addBtn.onclick = buyAccountSlot;
+        if(addTabBtn){ addTabBtn.disabled = true; addTabBtn.style.opacity = '0.3'; }
+        upgradeBanner.classList.add('hidden');
       } else {
-        // Max reached
-        if(currentUser.keyRevoked){
-          addBtn.textContent = 'Access Revoked';
-        } else {
-          addBtn.textContent = 'Limit Reached (' + configured + '/' + limit + ')';
-        }
+        // Truly maxed out at 5 or no more purchasable slots
+        addBtn.textContent = 'Limit Reached (' + configured + '/' + limit + ')';
         addBtn.disabled = true;
         addBtn.style.opacity = '0.5';
-        if(addTabBtn){
-          addTabBtn.disabled = true;
-          addTabBtn.style.opacity = '0.3';
-        }
-        slotBanner.classList.add('hidden');
+        addBtn.style.pointerEvents = 'none';
+        addBtn.onclick = null;
+        if(addTabBtn){ addTabBtn.disabled = true; addTabBtn.style.opacity = '0.3'; }
 
         if(!currentUser.keyRevoked && limit < 5){
           upgradeBanner.classList.remove('hidden');
         } else {
           upgradeBanner.classList.add('hidden');
         }
+      }
+    }
+
+    // ==================== BUY ACCOUNT SLOT ($0.50) - goes to Activity tab ====================
+    async function buyAccountSlot(){
+      if(!currentUser) return;
+
+      if(currentUser.keyRevoked){
+        alert('Your access was revoked. Please purchase a new plan.');
+        scrollToSection('pricing');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/payment/create-slot', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ quantity: 1 })
+        });
+        const data = await res.json();
+        if(data.success && data.payment){
+          isSlotPurchase = true;
+          showPaymentScreen(data.payment);
+          showView('activity');
+        } else {
+          alert(data.error || 'Failed to create slot purchase');
+          if(data.canUpgrade){
+            scrollToSection('pricing');
+          }
+        }
+      } catch(e) { 
+        alert('Error creating slot purchase. Make sure wallet is configured.'); 
       }
     }
 
@@ -1617,25 +1653,20 @@
       const limit = currentUser.accountsLimit || 1;
       const baseLimit = currentUser.tierBaseLimit || 1;
       const configured = currentUser.configuredCount || 0;
-      const plan = currentUser.plan || '';
+      const purchasableSlots = currentUser.purchasableSlots || 0;
 
       if(configured >= limit){
-        if(plan === 'v1' || plan === 'v2'){
-          if (currentUser.purchasableSlots > 0) {
-            showSlotPurchaseModal();
-          } else {
-            alert('Max ' + limit + ' accounts reached on ' + (plan || 'your plan') + '!');
-          }
-        } else if(plan === 'v3' || plan === 'v3-lifetime'){
-          alert('Max 5 accounts reached on v3!');
+        if (purchasableSlots > 0 && configured < 5) {
+          buyAccountSlot();
+        } else {
+          alert('Max ' + limit + ' accounts reached on ' + (currentUser.plan || 'your plan') + '!');
         }
-        scrollToSection('pricing');
         return;
       }
 
-      // If within free tier, add freely. If exceeds free tier, show purchase modal.
-      if (configured >= baseLimit && currentUser.purchasableSlots > 0) {
-        showSlotPurchaseModal();
+      // If within free tier, add freely. If exceeds free tier, buy.
+      if (configured >= baseLimit && purchasableSlots > 0) {
+        buyAccountSlot();
         return;
       }
 
@@ -1968,11 +1999,7 @@
           hideRevokedBanner();
           await checkAuth();
 
-          if (payment.tier === 'slot-purchase') {
-            setTimeout(()=>{ showView('dashboard'); }, 2000);
-          } else {
-            setTimeout(()=>{ showView('dashboard'); }, 2000);
-          }
+          setTimeout(()=>{ showView('dashboard'); }, 2000);
         } else if(payment.status === 'expired'){
           statusEl.textContent = 'Address expired. Start a new purchase.';
           statusEl.className = 'payment-status expired';
@@ -2081,7 +2108,7 @@
       } catch(e) {}
     }
 
-    // ==================== SLOT PURCHASE ====================
+    // ==================== SLOT PURCHASE MODAL (kept for other uses) ====================
     function showSlotPurchaseModal() {
       if(!currentUser) return;
 
@@ -2096,7 +2123,6 @@
         return;
       }
 
-      // Set modal info text based on plan
       const infoEl = document.getElementById('slotPurchaseInfo');
       if (plan === 'v1') {
         infoEl.textContent = 'v1 includes 1 account. You can purchase up to ' + maxCanBuy + ' additional slot(s) at $0.50 each. Max 5 accounts total.';
