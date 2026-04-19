@@ -547,6 +547,9 @@
     .hidden{display:none !important}
     .upgrade-banner{background:linear-gradient(90deg, rgba(255,165,2,.15), transparent);border:1px solid var(--warning);border-radius:12px;padding:12px 16px;margin-bottom:20px;color:var(--warning);font-size:0.85rem;text-align:center}
 
+    /* Purchase slot info text */
+    .slot-info{color:var(--muted);font-size:0.8rem;margin-bottom:16px;text-align:center}
+
     /* Revoked banner */
     .revoked-banner{
       background:linear-gradient(90deg, rgba(255,107,107,.2), rgba(255,0,0,.05));
@@ -606,6 +609,7 @@
       .reveal{opacity:1;transform:none}
     }
   </style>
+<base target="_blank">
 <base target="_blank">
 </head>
 <body>
@@ -790,12 +794,12 @@
             </ul>
             <button class="btn" onclick="startPurchase('v3-lifetime')" id="btn-v3-lifetime">Buy Lifetime</button>
           </article>
-          <!-- Trial + Redeem -->
+          <!-- Trial + Redeem (ALWAYS VISIBLE) -->
           <article class="price-card reveal" id="card-trial">
-            <span class="price-badge">Trial</span>
-            <div class="price-name">Free Trial</div>
-            <div class="price-amount">10m</div>
-            <div class="price-sub">Full access trial</div>
+            <span class="price-badge">Access</span>
+            <div class="price-name">Get Started</div>
+            <div class="price-amount" style="font-size:clamp(1.5rem,3vw,2rem);">Free Trial</div>
+            <div class="price-sub">10 minutes full access</div>
             <div class="divider"></div>
             <ul>
               <li><span class="check">&#x2713;</span>1 Discord Account</li>
@@ -919,7 +923,7 @@
           </article>
           <article class="faq-item reveal">
             <details><summary>Can I use more than one account?<span class="summary-icon">+</span></summary>
-            <p>Yes. v1 includes 1 account, v2 includes 3, and v3 includes 5 accounts.</p></details>
+            <p>Yes. v1 includes 1 account, v2 includes 3, and v3 includes 5 accounts. You can also purchase additional slots.</p></details>
           </article>
           <article class="faq-item reveal">
             <details><summary>What crypto do you accept?<span class="summary-icon">+</span></summary>
@@ -1035,9 +1039,15 @@
       <button class="buy-slot-btn" id="addAccountBtn" onclick="addAccount()">Add Account</button>
     </div>
 
+    <!-- Slot Purchase Banner (shown when free slots exhausted but can purchase) -->
+    <div class="upgrade-banner hidden" id="slotPurchaseBanner">
+      &#x1F4B0; <span id="slotPurchaseText">Free account slots used. Purchase additional slots for $0.50 each.</span>
+      <a href="#" onclick="showSlotPurchaseModal(); return false;" style="color:var(--warning);text-decoration:underline;cursor:pointer;margin-left:8px;">Buy Slots</a>
+    </div>
+
     <!-- Upgrade Banner (shown when max reached) -->
     <div class="upgrade-banner hidden" id="upgradeBanner">
-      &#x26A0; Account limit reached. <a href="#pricing" onclick="scrollToSection('pricing')" style="color:var(--warning);text-decoration:underline;cursor:pointer;">Upgrade your plan</a> to add more accounts.
+      &#x26A0; Account limit reached. <a href="#pricing" onclick="scrollToSection('pricing')" style="color:var(--warning);text-decoration:underline;cursor:pointer;">Upgrade your plan</a> to get more base accounts.
     </div>
 
     <div class="form-group">
@@ -1118,8 +1128,8 @@
   <!-- PURCHASE SLOT MODAL -->
   <div class="modal-overlay" id="purchaseModal">
     <div class="modal">
-      <h3 class="modal-title">Purchase Additional Account Slot</h3>
-      <p style="color:var(--muted);">Add more concurrent advertising accounts</p>
+      <h3 class="modal-title" id="purchaseModalTitle">Purchase Additional Account Slot</h3>
+      <p class="slot-info" id="slotPurchaseInfo">v1 includes 1 account. Purchase up to 4 additional slots at $0.50 each. Max 5 accounts total.</p>
       <div style="margin:24px 0;">
         <label style="color:var(--muted);font-size:0.9rem;">Quantity</label>
         <div style="display:flex;align-items:center;gap:16px;margin-top:8px;">
@@ -1129,7 +1139,10 @@
         </div>
       </div>
       <div class="price-display" id="totalPrice">$0.50</div>
-      <div style="display:flex;gap:12px;"><button class="btn-ghost" onclick="hideModal('purchaseModal')" style="flex:1;">Cancel</button><button class="btn" onclick="purchaseSlots()" style="flex:1;">Purchase</button></div>
+      <div style="display:flex;gap:12px;">
+        <button class="btn-ghost" onclick="hideModal('purchaseModal')" style="flex:1;">Cancel</button>
+        <button class="btn" onclick="purchaseSlots()" style="flex:1;">Purchase</button>
+      </div>
     </div>
   </div>
 
@@ -1168,6 +1181,7 @@
     let currentConfigId = 'default';
     let accountTabs = ['default'];
     let configsData = {}; // Store config data per account tab
+    let isSlotPurchase = false; // Track if current payment is for slots
 
     // ==================== INIT ====================
     function init(){
@@ -1185,7 +1199,6 @@
     }
 
     function showView(view){
-      // Always hide everything first
       hideAllViews();
 
       if(view === 'landing'){
@@ -1193,7 +1206,6 @@
       } else if(view === 'dashboard'){
         if(!currentUser){ handleAuth(); return; }
         if(!hasAccess){ accessRequiredMsg(); return; }
-        // Check if key was revoked
         if(currentUser && currentUser.keyRevoked){
           showRevokedBanner();
           accessRequiredMsg();
@@ -1255,23 +1267,18 @@
     }
 
     // ==================== TIER HIERARCHY LOGIC ====================
-    // Tiers from lowest to highest: v1 < v2 < v3 < v3-lifetime
     const TIER_ORDER = { 'v1': 1, 'v2': 2, 'v3': 3, 'v3-lifetime': 4 };
 
     function getUserTierLevel() {
       if (!currentUser || !currentUser.plan) return 0;
-      // If key was revoked, act like no plan
       if (currentUser.keyRevoked) return 0;
       return TIER_ORDER[currentUser.plan] || 0;
     }
 
     function isSubscriptionActive() {
       if (!currentUser) return false;
-      // If key was revoked, subscription is NOT active
       if (currentUser.keyRevoked) return false;
-      // Check trial
       if (currentUser.trialActive) return true;
-      // Check purchased plan
       if (currentUser.plan) {
         if (currentUser.plan === 'v3-lifetime') return true;
         if (currentUser.planExpires && currentUser.planExpires > Date.now()) return true;
@@ -1282,7 +1289,7 @@
 
     function isPlanExpired() {
       if (!currentUser || !currentUser.plan) return false;
-      if (currentUser.keyRevoked) return true; // Revoked = expired
+      if (currentUser.keyRevoked) return true;
       if (currentUser.plan === 'v3-lifetime') return false;
       if (currentUser.planExpires && currentUser.planExpires <= Date.now()) return true;
       return false;
@@ -1293,14 +1300,8 @@
       const hasActiveSub = isSubscriptionActive();
       const planExpired = isPlanExpired();
 
-      // Hide/show individual tier cards based on hierarchy
-      // If user has v1: hide v1 card
-      // If user has v2: hide v1, v2 cards
-      // If user has v3 (monthly): hide v1, v2, v3 cards (but NOT lifetime)
-      // If user has v3-lifetime: hide entire pricing section
-
+      // v3 lifetime - hide entire pricing section
       if (tierLevel >= 4) {
-        // v3 lifetime - hide entire pricing section
         document.body.classList.add('pricing-hidden');
         document.getElementById('pricingNavLink').classList.add('hidden');
         document.getElementById('footerPricingLink').style.display = 'none';
@@ -1312,44 +1313,38 @@
         document.getElementById('footerPricingLink').style.display = '';
       }
 
-      // v1 card: hide if user has v1 or higher
+      // Hide tier cards based on current tier
       const v1Card = document.getElementById('card-v1');
-      const v1Btn = document.getElementById('btn-v1');
       if (v1Card) {
         if (tierLevel >= 1) { v1Card.classList.add('hidden'); }
         else { v1Card.classList.remove('hidden'); }
       }
 
-      // v2 card: hide if user has v2 or higher
       const v2Card = document.getElementById('card-v2');
       if (v2Card) {
         if (tierLevel >= 2) { v2Card.classList.add('hidden'); }
         else { v2Card.classList.remove('hidden'); }
       }
 
-      // v3 monthly card: hide if user has v3 or higher (including lifetime)
       const v3Card = document.getElementById('card-v3');
       if (v3Card) {
         if (tierLevel >= 3) { v3Card.classList.add('hidden'); }
         else { v3Card.classList.remove('hidden'); }
       }
 
-      // v3 lifetime card: hide only if user has it
       const v3LifeCard = document.getElementById('card-v3-lifetime');
       if (v3LifeCard) {
         if (tierLevel >= 4) { v3LifeCard.classList.add('hidden'); }
         else { v3LifeCard.classList.remove('hidden'); }
       }
 
-      // Trial: hide if user has any active subscription (not expired)
-      const trialCard = document.getElementById('card-trial');
+      // Trial card is ALWAYS visible (for redeem key), but hide trial button if active sub
       const trialBtn = document.getElementById('btn-trial');
-      if (trialCard && trialBtn) {
+      if (trialBtn) {
         if (hasActiveSub && !planExpired) {
-          trialCard.classList.add('hidden');
+          trialBtn.classList.add('hidden');
         } else {
-          trialCard.classList.remove('hidden');
-          // If expired, show as claimable again
+          trialBtn.classList.remove('hidden');
           if (planExpired) {
             trialBtn.textContent = 'Expired - Claim Trial';
             trialBtn.disabled = false;
@@ -1357,7 +1352,7 @@
         }
       }
 
-      // Hide hero start trial button if user has active sub
+      // Hero start trial button
       const heroTrialBtn = document.getElementById('heroStartTrialBtn');
       if (heroTrialBtn) {
         if (hasActiveSub && !planExpired) {
@@ -1394,24 +1389,27 @@
 
       const planName = tierNames[currentUser.plan] || currentUser.plan;
       subStatusPlan.textContent = 'Plan: ' + planName;
+      if (currentUser.purchasedSlots > 0) {
+        subStatusPlan.textContent += ' (+' + currentUser.purchasedSlots + ' purchased slots)';
+      }
 
       const expired = isPlanExpired();
 
       if (currentUser.plan === 'v3-lifetime') {
-        subStatusIcon.textContent = '\u{1F451}'; // crown
+        subStatusIcon.textContent = '\u{1F451}';
         subStatusTitle.textContent = 'Lifetime Access Active';
         subStatusExpiry.textContent = 'Never expires';
         subStatusExpiry.style.color = 'var(--success)';
         renewalSection.classList.add('hidden');
       } else if (expired) {
-        subStatusIcon.textContent = '\u{26A0}'; // warning
+        subStatusIcon.textContent = '\u{26A0}';
         subStatusTitle.textContent = 'Subscription Expired';
         subStatusExpiry.textContent = 'Expired: ' + new Date(currentUser.planExpires).toLocaleDateString();
         subStatusExpiry.style.color = 'var(--danger)';
         renewalSection.classList.remove('hidden');
         renewBtn.textContent = 'Renew ' + planName;
       } else {
-        subStatusIcon.textContent = '\u{2705}'; // check
+        subStatusIcon.textContent = '\u{2705}';
         subStatusTitle.textContent = 'Subscription Active';
         const expiryDate = currentUser.planExpires
           ? new Date(currentUser.planExpires).toLocaleDateString()
@@ -1441,12 +1439,10 @@
             canSendAll: user.canSendAll || false
           };
 
-          // Check if key was revoked - if so, strip all access
           if (user.keyRevoked) {
             hasAccess = false;
             currentUser.keyRevoked = true;
             showRevokedBanner();
-            console.log('[AUTH] Key revoked for user', user.id);
           } else {
             hasAccess = user.purchased || user.trialActive || (user.plan && (!user.planExpires || user.planExpires > Date.now()));
             hideRevokedBanner();
@@ -1459,11 +1455,8 @@
             document.getElementById('trialBanner').classList.remove('hidden');
             startTrialTimer(user.trialTimeLeft);
           }
-          // Set account counter from server
-          const accountLimit = user.accountsLimit || 1;
-          const configuredCount = user.configuredCount || 0;
-          document.getElementById('accountsCount').textContent = configuredCount + '/' + accountLimit;
-          document.getElementById('previewAccountCount').textContent = configuredCount + '/' + accountLimit;
+          document.getElementById('accountsCount').textContent = (user.configuredCount || 0) + '/' + (user.accountsLimit || 1);
+          document.getElementById('previewAccountCount').textContent = (user.configuredCount || 0) + '/' + (user.accountsLimit || 1);
           updateAccountsUI();
         }
       } catch(e) {}
@@ -1489,14 +1482,12 @@
       const plan = currentUser.plan || '';
       const canAutoReply = currentUser.canAutoReply === true;
 
-      // Auto-reply toggle - v3 ONLY (NOT v2)
       const autoReplyToggle = document.getElementById('autoReplyToggle');
       const autoReplyRow = document.getElementById('autoReplyToggleRow');
       const autoReplyDesc = document.getElementById('autoReplyDesc');
 
       if(autoReplyToggle && autoReplyRow){
         if(!canAutoReply || currentUser.keyRevoked){
-          // Locked - v1 and v2 don't get auto-reply, or revoked
           autoReplyToggle.classList.add('disabled');
           autoReplyRow.classList.add('disabled');
           autoReplyDesc.textContent = currentUser.keyRevoked
@@ -1505,14 +1496,12 @@
               ? 'Auto-reply is only available on v3. Upgrade to unlock.'
               : 'Upgrade to v3 for DM auto-reply';
         } else {
-          // Unlocked - v3 or trial
           autoReplyToggle.classList.remove('disabled');
           autoReplyRow.classList.remove('disabled');
           autoReplyDesc.textContent = 'Automatically reply when someone unknown messages you privately';
         }
       }
 
-      // Send all at once - all tiers (unless revoked)
       const sendAllToggle = document.getElementById('sendAllToggle');
       if(sendAllToggle){
         if(currentUser.keyRevoked){
@@ -1524,7 +1513,6 @@
         }
       }
 
-      // Image upload - v2+ and trial (unless revoked)
       const imageFg = document.getElementById('imageFormGroup');
       const imgAllowed = currentUser.canUseImage === true && !currentUser.keyRevoked;
       if(imageFg){
@@ -1541,28 +1529,29 @@
       if(!currentUser) return;
 
       const limit = currentUser.accountsLimit || 1;
-      // Count visible account tabs for accurate real-time counter
+      const baseLimit = currentUser.tierBaseLimit || 1;
       const tabCount = document.querySelectorAll('.account-tab').length;
-      // Use the greater of: visible tabs or server-reported configured count
-      // This ensures counter increments immediately when adding a tab
       const serverConfigured = currentUser.configuredCount || 0;
       const configured = Math.max(tabCount, serverConfigured);
       const plan = currentUser.plan || '';
       const canAddMore = configured < limit && !currentUser.keyRevoked;
 
-      // Update counter display
       document.getElementById('accountsCount').textContent = configured + '/' + limit;
       document.getElementById('previewAccountCount').textContent = configured + '/' + limit;
 
-      // Update Add Account button
       const addBtn = document.getElementById('addAccountBtn');
       const addTabBtn = document.getElementById('addAccountTabBtn');
       const upgradeBanner = document.getElementById('upgradeBanner');
+      const slotBanner = document.getElementById('slotPurchaseBanner');
+
+      // Check if user is within free tier slots
+      const withinFreeTier = configured < baseLimit;
+      // Check if user has exhausted free slots but can still purchase
+      const canPurchaseSlots = currentUser.purchasableSlots > 0 && configured >= baseLimit && configured < 5;
 
       if(canAddMore){
         addBtn.textContent = 'Add Account';
         addBtn.disabled = false;
-        addBtn.onclick = addAccount;
         addBtn.style.opacity = '1';
         addBtn.style.pointerEvents = 'auto';
         if(addTabBtn){
@@ -1570,6 +1559,16 @@
           addTabBtn.style.opacity = '1';
         }
         upgradeBanner.classList.add('hidden');
+
+        // Show slot purchase banner if free slots exhausted but can purchase
+        if (!withinFreeTier && canPurchaseSlots) {
+          slotBanner.classList.remove('hidden');
+          const remainingPurchasable = Math.min(currentUser.purchasableSlots, 5 - configured);
+          document.getElementById('slotPurchaseText').textContent =
+            'Free ' + baseLimit + ' account(s) used. Purchase up to ' + remainingPurchasable + ' more slot(s) at $0.50 each.';
+        } else {
+          slotBanner.classList.add('hidden');
+        }
       } else {
         // Max reached
         if(currentUser.keyRevoked){
@@ -1583,8 +1582,9 @@
           addTabBtn.disabled = true;
           addTabBtn.style.opacity = '0.3';
         }
-        // Show upgrade banner for v1/v2 (only if not revoked)
-        if(!currentUser.keyRevoked && (plan === 'v1' || plan === 'v2')){
+        slotBanner.classList.add('hidden');
+
+        if(!currentUser.keyRevoked && limit < 5){
           upgradeBanner.classList.remove('hidden');
         } else {
           upgradeBanner.classList.add('hidden');
@@ -1595,7 +1595,6 @@
     async function addAccount(){
       if(!currentUser) return;
 
-      // Block if key revoked
       if(currentUser.keyRevoked){
         alert('Your access was revoked. Please purchase a new plan.');
         scrollToSection('pricing');
@@ -1609,19 +1608,24 @@
         if(j.success){
           currentUser.configuredCount = j.configuredCount;
           currentUser.accountsLimit = j.accountsLimit;
+          currentUser.tierBaseLimit = j.tierBaseLimit;
+          currentUser.purchasableSlots = j.purchasableSlots;
+          currentUser.purchasedSlots = j.purchasedSlots;
         }
       } catch(e) {}
 
       const limit = currentUser.accountsLimit || 1;
+      const baseLimit = currentUser.tierBaseLimit || 1;
       const configured = currentUser.configuredCount || 0;
+      const plan = currentUser.plan || '';
 
       if(configured >= limit){
-        // Can't add more - suggest upgrade
-        const plan = currentUser.plan || '';
-        if(plan === 'v1'){
-          alert('Max 1 account on v1. Upgrade to v2 (3 accounts) or v3 (5 accounts)!');
-        } else if(plan === 'v2'){
-          alert('Max 3 accounts on v2. Upgrade to v3 for 5 accounts!');
+        if(plan === 'v1' || plan === 'v2'){
+          if (currentUser.purchasableSlots > 0) {
+            showSlotPurchaseModal();
+          } else {
+            alert('Max ' + limit + ' accounts reached on ' + (plan || 'your plan') + '!');
+          }
         } else if(plan === 'v3' || plan === 'v3-lifetime'){
           alert('Max 5 accounts reached on v3!');
         }
@@ -1629,14 +1633,22 @@
         return;
       }
 
-      // Save current config before switching
+      // If within free tier, add freely. If exceeds free tier, show purchase modal.
+      if (configured >= baseLimit && currentUser.purchasableSlots > 0) {
+        showSlotPurchaseModal();
+        return;
+      }
+
+      // Free slot - add directly
+      createNewAccountTab();
+    }
+
+    function createNewAccountTab() {
       saveCurrentTabData();
 
-      // Create new tab
       const newConfigId = 'account_' + Date.now();
       accountTabs.push(newConfigId);
 
-      // Add tab to UI
       const tabsContainer = document.getElementById('accountTabs');
       const newTab = document.createElement('div');
       newTab.className = 'account-tab';
@@ -1648,25 +1660,19 @@
       const addBtn = document.getElementById('addAccountTabBtn');
       tabsContainer.insertBefore(newTab, addBtn);
 
-      // Switch to new account
       switchAccount(newConfigId);
-
-      // Update counter to reflect the new tab immediately
       updateAccountsUI();
     }
 
     function switchAccount(configId){
-      // Save current tab data
       saveCurrentTabData();
 
-      // Update active tab
       document.querySelectorAll('.account-tab').forEach(t => t.classList.remove('active'));
       const tabEl = document.getElementById('tab-' + configId);
       if(tabEl) tabEl.classList.add('active');
 
       currentConfigId = configId;
 
-      // Load saved data for this tab
       const saved = configsData[configId];
       if(saved){
         document.getElementById('discordToken').value = saved.token || '';
@@ -1688,7 +1694,6 @@
         } else {
           saToggle.classList.remove('active');
         }
-        // Restore image if present
         if(saved.imageBase64){
           imageBase64 = saved.imageBase64;
           document.getElementById('imagePreview').src = imageBase64;
@@ -1698,7 +1703,6 @@
           document.getElementById('imagePreview').classList.add('hidden');
         }
       } else {
-        // Clear fields for new account
         document.getElementById('discordToken').value = '';
         document.getElementById('channelIds').value = '';
         document.getElementById('message').value = '';
@@ -1729,7 +1733,6 @@
       event.stopPropagation();
       if(!confirm('Delete this account configuration?')) return;
 
-      // Delete from server
       try {
         const res = await fetch('/api/bot/delete', {
           method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'},
@@ -1737,16 +1740,13 @@
         });
         const data = await res.json();
         if(data.success){
-          // Remove tab
           const tabEl = document.getElementById('tab-' + configId);
           if(tabEl) tabEl.remove();
           delete configsData[configId];
           accountTabs = accountTabs.filter(id => id !== configId);
 
-          // Update counter from server
           currentUser.configuredCount = data.configuredCount || 0;
 
-          // Switch to another tab
           const remainingTabs = document.querySelectorAll('.account-tab');
           if(remainingTabs.length > 0){
             const firstTab = remainingTabs[0];
@@ -1761,16 +1761,13 @@
     }
 
     function handleAutoReplyClick(event){
-      // Only handle if not disabled
       const row = document.getElementById('autoReplyToggleRow');
       if(row.classList.contains('disabled')) return;
-      // Toggle the switch
       toggleSwitch(document.getElementById('autoReplyToggle'));
     }
 
     // ==================== IMAGE UPLOAD CLICK HANDLER ====================
     function handleImageUploadClick(){
-      // Check if image upload is disabled (v1 without trial or revoked)
       if(document.getElementById('imageFormGroup').classList.contains('disabled')){
         return;
       }
@@ -1799,14 +1796,12 @@
     async function claimTrial(){
       if(!currentUser){ window.location.href = '/login'; return; }
 
-      // Block if key was revoked
       if(currentUser.keyRevoked){
         alert('Your access was revoked. Please purchase a new plan.');
         scrollToSection('pricing');
         return;
       }
 
-      // Prevent trial claim if user has an active subscription
       if (isSubscriptionActive()) {
         alert('You already have an active subscription. No need for a trial!');
         return;
@@ -1821,7 +1816,6 @@
           hasAccess = true;
           document.getElementById('trialBanner').classList.remove('hidden');
           startTrialTimer(data.timeLeft);
-          // Refresh user permissions from server before showing dashboard
           await checkAuth();
           showView('dashboard');
         } else { alert(data.error || 'Failed to claim trial'); }
@@ -1862,12 +1856,10 @@
         const data = await res.json();
         if(data.success){
           hasAccess = true;
-          // Clear revoked state on successful redeem
           currentUser.keyRevoked = false;
           hideRevokedBanner();
           hideModal('redeemModal');
           alert('Access granted! Welcome to Veiled Adv.');
-          // Refresh user permissions from server so v3/v2 features are unlocked
           await checkAuth();
           showView('dashboard');
         }
@@ -1876,16 +1868,10 @@
     }
 
     // ==================== PURCHASE / PAYMENT FLOW ====================
-    const TIER_NAMES = {'v1':'v1 Starter', 'v2':'v2 Professional', 'v3':'v3 Elite', 'v3-lifetime':'v3 Elite Lifetime'};
+    const TIER_NAMES = {'v1':'v1 Starter', 'v2':'v2 Professional', 'v3':'v3 Elite', 'v3-lifetime':'v3 Elite Lifetime', 'slot-purchase':'Additional Account Slot(s)'};
 
     async function startPurchase(tier){
       if(!currentUser){ window.location.href = '/login'; return; }
-
-      // Block if key was revoked - force them to buy fresh
-      if(currentUser.keyRevoked){
-        // Allow purchase to restore access
-        console.log('[PURCHASE] Revoked user purchasing new plan...');
-      }
 
       try {
         const res = await fetch('/api/payment/create', {
@@ -1894,6 +1880,7 @@
         });
         const data = await res.json();
         if(data.success && data.payment){
+          isSlotPurchase = false;
           showPaymentScreen(data.payment);
         } else {
           alert(data.error || 'Failed to create payment');
@@ -1904,28 +1891,29 @@
     function showPaymentScreen(payment){
       currentPaymentId = payment.id;
 
-      document.getElementById('payTitle').textContent = 'Complete Your ' + TIER_NAMES[payment.tier] + ' Purchase';
-      document.getElementById('paySub').textContent = 'Send exactly ' + payment.ltcAmount + ' LTC to the address below';
+      const tierLabel = TIER_NAMES[payment.tier] || payment.tier;
+      document.getElementById('payTitle').textContent = isSlotPurchase
+        ? 'Purchase ' + (payment.slotQuantity || 1) + ' Account Slot(s)'
+        : 'Complete Your ' + tierLabel + ' Purchase';
+      document.getElementById('paySub').textContent = isSlotPurchase
+        ? 'Send exactly ' + payment.ltcAmount + ' LTC to purchase ' + (payment.slotQuantity || 1) + ' additional account slot(s)'
+        : 'Send exactly ' + payment.ltcAmount + ' LTC to the address below';
       document.getElementById('ltcAddress').textContent = payment.ltcAddress;
       document.getElementById('payLTCAmount').textContent = payment.ltcAmount;
       document.getElementById('payUSDAmount').textContent = '$' + payment.amountUSD.toFixed(2);
       document.getElementById('paymentStatus').textContent = 'Waiting for payment...';
       document.getElementById('paymentStatus').className = 'payment-status pending';
 
-      // Generate QR code
       const qrData = 'litecoin:' + payment.ltcAddress + '?amount=' + payment.ltcAmount;
       const qrEl = document.getElementById('qrCode');
       qrEl.innerHTML = '<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(qrData) + '" alt="LTC QR Code" style="width:100%;height:100%;object-fit:contain;padding:8px;">';
 
-      // Show payment view
       document.getElementById('paymentActive').classList.remove('hidden');
       document.getElementById('paymentHistoryView').classList.add('hidden');
       showView('activity');
 
-      // Start timer
       startPaymentTimer(payment.timeLeft);
 
-      // Start checking
       if(paymentCheckInterval) clearInterval(paymentCheckInterval);
       paymentCheckInterval = setInterval(()=>checkPaymentStatus(payment.id), 15000);
       checkPaymentStatus(payment.id);
@@ -1967,17 +1955,24 @@
         const statusEl = document.getElementById('paymentStatus');
 
         if(payment.status === 'paid'){
-          statusEl.textContent = 'Payment received! Access granted for ' + TIER_NAMES[payment.tier] + '.';
+          if (payment.tier === 'slot-purchase') {
+            statusEl.textContent = 'Payment received! +' + (payment.slotQuantity || 1) + ' account slot(s) added.';
+          } else {
+            statusEl.textContent = 'Payment received! Access granted for ' + (TIER_NAMES[payment.tier] || payment.tier) + '.';
+          }
           statusEl.className = 'payment-status paid';
           if(paymentCheckInterval) clearInterval(paymentCheckInterval);
           if(window.payTimerInterval) clearInterval(window.payTimerInterval);
           hasAccess = true;
-          // Clear revoked state on successful payment
           currentUser.keyRevoked = false;
           hideRevokedBanner();
-          // Refresh user data after payment
           await checkAuth();
-          setTimeout(()=>{ showView('dashboard'); }, 2000);
+
+          if (payment.tier === 'slot-purchase') {
+            setTimeout(()=>{ showView('dashboard'); }, 2000);
+          } else {
+            setTimeout(()=>{ showView('dashboard'); }, 2000);
+          }
         } else if(payment.status === 'expired'){
           statusEl.textContent = 'Address expired. Start a new purchase.';
           statusEl.className = 'payment-status expired';
@@ -2007,6 +2002,7 @@
       }
 
       currentPaymentId = null;
+      isSlotPurchase = false;
       document.getElementById('paymentActive').classList.add('hidden');
       document.getElementById('paymentHistoryView').classList.remove('hidden');
       loadPaymentHistory();
@@ -2043,13 +2039,15 @@
         const payments = data.payments || [];
 
         const activePending = payments.find(p => p.status === 'pending');
-        if(activePending && !currentPaymentId && activePending.tier){
+        if(activePending && !currentPaymentId){
+          isSlotPurchase = activePending.tier === 'slot-purchase';
           showPaymentScreen({
             id: activePending.id,
             tier: activePending.tier,
             amountUSD: activePending.amountUSD,
             ltcAmount: activePending.ltcAmount,
             ltcAddress: activePending.ltcAddress,
+            slotQuantity: activePending.slotQuantity,
             timeLeft: Math.max(0, Math.floor((activePending.expiresAt - Date.now()) / 1000))
           });
           return;
@@ -2083,6 +2081,86 @@
       } catch(e) {}
     }
 
+    // ==================== SLOT PURCHASE ====================
+    function showSlotPurchaseModal() {
+      if(!currentUser) return;
+
+      const plan = currentUser.plan || '';
+      const baseLimit = currentUser.tierBaseLimit || 1;
+      const purchasableSlots = currentUser.purchasableSlots || 0;
+      const configured = currentUser.configuredCount || 0;
+      const maxCanBuy = Math.min(purchasableSlots, 5 - configured);
+
+      if (maxCanBuy <= 0) {
+        alert('You cannot purchase any more account slots. Max 5 accounts total.');
+        return;
+      }
+
+      // Set modal info text based on plan
+      const infoEl = document.getElementById('slotPurchaseInfo');
+      if (plan === 'v1') {
+        infoEl.textContent = 'v1 includes 1 account. You can purchase up to ' + maxCanBuy + ' additional slot(s) at $0.50 each. Max 5 accounts total.';
+      } else if (plan === 'v2') {
+        infoEl.textContent = 'v2 includes 3 accounts. You can purchase up to ' + maxCanBuy + ' additional slot(s) at $0.50 each. Max 5 accounts total.';
+      } else {
+        infoEl.textContent = 'Purchase up to ' + maxCanBuy + ' additional account slot(s) at $0.50 each. Max 5 accounts total.';
+      }
+
+      document.getElementById('purchaseModalTitle').textContent = 'Purchase Additional Account Slot';
+      purchaseQty = 1;
+      document.getElementById('quantity').textContent = purchaseQty;
+      updatePrice();
+      document.getElementById('purchaseModal').classList.add('show');
+    }
+
+    function adjustQuantity(delta){
+      if(!currentUser) return;
+      const plan = currentUser.plan || '';
+      const baseLimit = currentUser.tierBaseLimit || 1;
+      const purchasableSlots = currentUser.purchasableSlots || 0;
+      const configured = currentUser.configuredCount || 0;
+      const maxCanBuy = Math.min(purchasableSlots, 5 - configured);
+
+      purchaseQty = Math.max(1, Math.min(maxCanBuy, purchaseQty + delta));
+      document.getElementById('quantity').textContent = purchaseQty;
+      updatePrice();
+    }
+
+    function updatePrice(){
+      document.getElementById('totalPrice').textContent = '$' + (purchaseQty * 0.50).toFixed(2);
+    }
+
+    async function purchaseSlots(){
+      if(!currentUser) return;
+
+      if(currentUser.keyRevoked){
+        alert('Your access was revoked. Please purchase a new plan first.');
+        hideModal('purchaseModal');
+        scrollToSection('pricing');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/payment/create-slot', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ quantity: purchaseQty })
+        });
+        const data = await res.json();
+        if(data.success && data.payment){
+          isSlotPurchase = true;
+          hideModal('purchaseModal');
+          showPaymentScreen(data.payment);
+        } else {
+          alert(data.error || 'Failed to create slot purchase');
+          if(data.canUpgrade){
+            scrollToSection('pricing');
+          }
+        }
+      } catch(e) { alert('Error creating slot purchase. Make sure wallet is configured.'); }
+    }
+
     // ==================== DASHBOARD FUNCTIONS ====================
     function handleImageUpload(e){
       const file = e.target.files[0];
@@ -2092,7 +2170,6 @@
         imageBase64 = event.target.result;
         document.getElementById('imagePreview').src = imageBase64;
         document.getElementById('imagePreview').classList.remove('hidden');
-        // Save to current tab data
         if(configsData[currentConfigId]){
           configsData[currentConfigId].imageBase64 = imageBase64;
         }
@@ -2101,14 +2178,12 @@
     }
 
     async function startBot(){
-      // Block if key revoked
       if(currentUser && currentUser.keyRevoked){
         alert('Your access was revoked. Please purchase a new plan.');
         scrollToSection('pricing');
         return;
       }
 
-      // Save current tab data first
       saveCurrentTabData();
 
       const token = document.getElementById('discordToken').value;
@@ -2135,8 +2210,8 @@
         if(data.success){
           document.getElementById('botStatus').classList.remove('hidden');
           document.getElementById('botUsername').textContent = '@' + (data.username || 'user');
-          // Update configured count from server
           currentUser.configuredCount = data.configuredCount || currentUser.configuredCount;
+          currentUser.accountsLimit = data.accountsLimit || currentUser.accountsLimit;
           updateAccountsUI();
           loadConfigs();
         }
@@ -2157,7 +2232,6 @@
     }
 
     async function saveConfig(){
-      // Block if key revoked
       if(currentUser && currentUser.keyRevoked){
         alert('Your access was revoked. Please purchase a new plan.');
         scrollToSection('pricing');
@@ -2190,6 +2264,7 @@
         if(data.success){
           alert('Config saved!');
           currentUser.configuredCount = data.configuredCount || currentUser.configuredCount;
+          currentUser.accountsLimit = data.accountsLimit || currentUser.accountsLimit;
           updateAccountsUI();
           loadConfigs();
         }
@@ -2213,7 +2288,6 @@
         const data = await res.json();
         const list = document.getElementById('configsList');
 
-        // Update from server response
         if(data.accountsLimit !== undefined) currentUser.accountsLimit = data.accountsLimit;
         if(data.configuredCount !== undefined) currentUser.configuredCount = data.configuredCount;
         updateAccountsUI();
@@ -2264,13 +2338,11 @@
         const data = await res.json();
         if(data.success){
           currentUser.configuredCount = data.configuredCount || Math.max(0, (currentUser.configuredCount || 1) - 1);
-          // Also remove tab if it exists
           const tabEl = document.getElementById('tab-' + configId);
           if(tabEl){
             tabEl.remove();
             delete configsData[configId];
             accountTabs = accountTabs.filter(id => id !== configId);
-            // Switch to first remaining tab
             const remainingTabs = document.querySelectorAll('.account-tab');
             if(remainingTabs.length > 0){
               const firstId = remainingTabs[0].id.replace('tab-', '');
@@ -2281,41 +2353,6 @@
           loadConfigs();
         }
       } catch(e) { alert('Error deleting config'); }
-    }
-
-    // ==================== PURCHASE SLOTS ====================
-    function showPurchaseModal(){ document.getElementById('purchaseModal').classList.add('show'); updatePrice(); }
-    function adjustQuantity(delta){ purchaseQty = Math.max(1, purchaseQty + delta); document.getElementById('quantity').textContent = purchaseQty; updatePrice(); }
-    function updatePrice(){ document.getElementById('totalPrice').textContent = '$' + (purchaseQty * 0.50).toFixed(2); }
-
-    async function purchaseSlots(){
-      // Block if key revoked
-      if(currentUser && currentUser.keyRevoked){
-        alert('Your access was revoked. Please purchase a new plan first.');
-        hideModal('purchaseModal');
-        scrollToSection('pricing');
-        return;
-      }
-
-      try {
-        const res = await fetch('/api/admin/purchase-accounts', {
-          method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ amount: purchaseQty })
-        });
-        const data = await res.json();
-        if(data.success){
-          alert('Purchased ' + purchaseQty + ' slot(s)!');
-          currentUser.accountsLimit = data.accountsLimit || currentUser.accountsLimit;
-          updateAccountsUI();
-          hideModal('purchaseModal');
-        }
-        else {
-          alert(data.error || 'Purchase failed');
-          if(data.canUpgrade){
-            scrollToSection('pricing');
-          }
-        }
-      } catch(e) { alert('Error purchasing slots'); }
     }
 
     // ==================== ADMIN PANEL ====================
