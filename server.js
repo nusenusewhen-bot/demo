@@ -1,4 +1,4 @@
-const express = require('express');
+ const express = require('express');
 const session = require('express-session');
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
@@ -267,13 +267,13 @@ class VeiledDB {
         } else if (tier === 'v2') {
             userUpdates.accounts_limit = 3;
             userUpdates.can_use_image = true;
-            userUpdates.can_auto_reply = true;
+            userUpdates.can_auto_reply = false; // V2 does NOT get auto-reply
             userUpdates.can_join_server = false;
             userUpdates.can_send_all = true;
         } else if (tier === 'v3') {
             userUpdates.accounts_limit = 5;
             userUpdates.can_use_image = true;
-            userUpdates.can_auto_reply = true;
+            userUpdates.can_auto_reply = true; // V3 ONLY gets auto-reply
             userUpdates.can_join_server = true;
             userUpdates.can_send_all = true;
         }
@@ -524,7 +524,7 @@ async function checkPendingPayments() {
                     userUpdates.plan = 'v2';
                     userUpdates.accounts_limit = 3;
                     userUpdates.can_use_image = true;
-                    userUpdates.can_auto_reply = true;
+                    userUpdates.can_auto_reply = false; // V2 NO auto-reply
                     userUpdates.can_join_server = false;
                     userUpdates.can_send_all = true;
                     userUpdates.plan_expires = Date.now() + (30 * 24 * 60 * 60 * 1000);
@@ -532,7 +532,7 @@ async function checkPendingPayments() {
                     userUpdates.plan = 'v3';
                     userUpdates.accounts_limit = 5;
                     userUpdates.can_use_image = true;
-                    userUpdates.can_auto_reply = true;
+                    userUpdates.can_auto_reply = true; // V3 ONLY gets auto-reply
                     userUpdates.can_join_server = true;
                     userUpdates.can_send_all = true;
                     userUpdates.plan_expires = Date.now() + (30 * 24 * 60 * 60 * 1000);
@@ -541,7 +541,7 @@ async function checkPendingPayments() {
                     userUpdates.purchased = true;
                     userUpdates.accounts_limit = 5;
                     userUpdates.can_use_image = true;
-                    userUpdates.can_auto_reply = true;
+                    userUpdates.can_auto_reply = true; // Lifetime gets auto-reply too
                     userUpdates.can_join_server = true;
                     userUpdates.can_send_all = true;
                     userUpdates.plan_expires = null;
@@ -614,6 +614,10 @@ app.get('/api/user', ensureAuth, (req, res) => {
     const isWhitelisted = db.isWhitelisted(req.user.id);
     const hasActivePlan = user.plan && (!user.plan_expires || user.plan_expires > Date.now());
 
+    // Get configured accounts count (actual saved configs)
+    const configs = db.getConfigs(req.user.id);
+    const configuredCount = configs.length;
+
     res.json({ 
         id: req.user.id,
         username: req.user.username,
@@ -625,11 +629,14 @@ app.get('/api/user', ensureAuth, (req, res) => {
         trialExpires: user.trial_expires || 0,
         accountsLimit: user.accounts_limit || 1,
         accountsPurchased: user.accounts_purchased || 0,
+        configuredCount: configuredCount, // Actual number of configured accounts
         isAdmin: isAdmin,
         isWhitelisted: isWhitelisted,
         canGenerate: isAdmin || isWhitelisted, // Both admins and whitelisted can generate
         plan: user.plan || null,
-        planExpires: user.plan_expires || null
+        planExpires: user.plan_expires || null,
+        canAutoReply: user.can_auto_reply || false,
+        canJoinServer: user.can_join_server || false
     });
 });
 
@@ -850,7 +857,8 @@ app.get('/api/bot/configs', ensureAuth, ensurePurchased, (req, res) => {
     res.json({ 
         success: true, 
         configs,
-        accountsLimit: user.accounts_limit || 1
+        accountsLimit: user.accounts_limit || 1,
+        configuredCount: configs.length
     });
 });
 
@@ -869,12 +877,25 @@ app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
 
         const user = db.getUser(req.user.id);
         const currentConfigs = db.getConfigs(req.user.id);
+        
+        // Check if this is a new config or updating existing
+        const isNewConfig = !currentConfigs.find(c => c.id === configId);
         const activeConfigCount = currentConfigs.filter(c => c.active === true).length;
+        const totalConfiguredCount = currentConfigs.length;
 
-        if (activeConfigCount >= (user.accounts_limit || 1)) {
+        // If it's a new config, check if user has reached their account limit
+        if (isNewConfig && totalConfiguredCount >= (user.accounts_limit || 1)) {
             return res.status(403).json({ 
                 success: false, 
-                error: 'Account limit reached. Stop an active bot or purchase additional slots.' 
+                error: 'Account limit reached (' + totalConfiguredCount + '/' + user.accounts_limit + '). Delete an existing config or upgrade your plan.' 
+            });
+        }
+
+        // Check auto-reply permission (v3 only)
+        if (autoReplyEnabled && !user.can_auto_reply) {
+            return res.status(403).json({ 
+                success: false, 
+                error: 'Auto-reply is only available on v3 plans' 
             });
         }
 
@@ -944,7 +965,8 @@ app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
             username: validation.username, 
             configId,
             serverJoined: false,
-            imageUrl: savedImageUrl
+            imageUrl: savedImageUrl,
+            configuredCount: isNewConfig ? totalConfiguredCount + 1 : totalConfiguredCount
         });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
@@ -976,8 +998,20 @@ app.post('/api/bot/stop', ensureAuth, (req, res) => {
 app.post('/api/bot/delete', ensureAuth, (req, res) => {
     try {
         const { configId } = req.body;
+        
+        // Stop the bot first
+        let selfbotModule;
+        try {
+            selfbotModule = require('./selfbot');
+            selfbotModule.stopSelfBot(req.user.id, configId);
+        } catch(e) {}
+        
+        db.unregisterActiveBot(req.user.id, configId);
         db.deleteConfig(req.user.id, configId);
-        res.json({ success: true });
+        
+        // Return updated count
+        const configs = db.getConfigs(req.user.id);
+        res.json({ success: true, configuredCount: configs.length });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
@@ -1055,7 +1089,7 @@ app.post('/api/admin/purchase-accounts', ensureAuth, (req, res) => {
     else if(plan === 'v3' || plan === 'v3-lifetime') maxAllowed = 5;
 
     if(currentPurchased + amount > maxAllowed){
-        return res.status(403).json({ success: false, error: 'Max accounts reached for your plan' });
+        return res.status(403).json({ success: false, error: 'Max accounts reached for your plan (' + maxAllowed + ')' });
     }
 
     let newLimit = currentLimit;
