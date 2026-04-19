@@ -40,8 +40,8 @@ accountPurchases: {},
 payments: [],
 usedAddressIndices: [],
 addressIndex: 0,
-revokedAddresses: [], // Addresses that were revoked - never reuse
-activeAddressMonitors: {} // Track active 30-min address monitors
+revokedAddresses: [],
+activeAddressMonitors: {}
 };
 this.load();
 }
@@ -340,7 +340,7 @@ createPayment(userId, tier, amountUSD, ltcAmount, ltcAddress, addressIndex, priv
         privateKeyWIF,
         status: 'pending',
         createdAt: Date.now(),
-        expiresAt: Date.now() + (30 * 60 * 1000), // 30 minutes
+        expiresAt: Date.now() + (30 * 60 * 1000),
         paidAt: null,
         txid: null,
         sweptAt: null,
@@ -527,145 +527,203 @@ function usdToLTC(usdAmount, ltcPrice) {
 return (usdAmount / ltcPrice).toFixed(8);
 }
 
-// ============ PAYMENT MONITORING — EVERY SECOND ============
-// Track which payments are actively being polled so we don’t stack calls
-const activePolls = new Set();
+// ============ PAYMENT MONITORING - checks every 1 second ============
+// Rate-limit guard: don’t fire a new check if one is already running
+let paymentCheckRunning = false;
 
-async function checkSinglePayment(payment) {
-if (activePolls.has(payment.id)) return; // already running
-activePolls.add(payment.id);
+async function checkPendingPayments() {
+if (paymentCheckRunning) return; // skip if previous check hasn’t finished
+paymentCheckRunning = true;
 
 ```
 try {
-    if (db.isAddressRevoked(payment.ltcAddress)) {
-        db.updatePaymentStatus(payment.id, 'expired', { expiredAt: Date.now() });
-        activePolls.delete(payment.id);
-        return;
-    }
+    const payments = db.data.payments || [];
+    const pendingPayments = payments.filter(p => p.status === 'pending' && p.expiresAt > Date.now());
 
-    const balance = await wallet.checkAddressBalance(payment.ltcAddress);
-    if (balance > 0) {
-        console.log(`[LTC] Address ${payment.ltcAddress} has balance: ${balance} LTC`);
-    }
+    for (const payment of pendingPayments) {
+        try {
+            if (db.isAddressRevoked(payment.ltcAddress)) {
+                db.updatePaymentStatus(payment.id, 'expired', { expiredAt: Date.now() });
+                continue;
+            }
 
-    const ltcPrice = await getLTCPrice();
-    const receivedUSD = balance * ltcPrice;
-    const tolerance = 0.10;
+            const balance = await wallet.checkAddressBalance(payment.ltcAddress);
 
-    if (receivedUSD >= payment.amountUSD - tolerance) {
-        // Payment confirmed!
-        const updates = {
-            status: 'paid',
-            paidAt: Date.now(),
-            receivedLTC: balance,
-            receivedUSD: receivedUSD
-        };
+            const ltcPrice = await getLTCPrice();
+            const receivedUSD = balance * ltcPrice;
+            const tolerance = 0.10;
 
-        const tier = payment.tier;
-        const userUpdates = { purchased: true };
+            if (receivedUSD >= payment.amountUSD - tolerance) {
+                const updates = {
+                    status: 'paid',
+                    paidAt: Date.now(),
+                    receivedLTC: balance,
+                    receivedUSD: receivedUSD
+                };
 
-        if (tier === 'v1') {
-            userUpdates.plan = 'v1';
-            userUpdates.accounts_limit = 1;
-            userUpdates.can_use_image = true;
-            userUpdates.can_auto_reply = false;
-            userUpdates.can_join_server = false;
-            userUpdates.can_send_all = true;
-            userUpdates.accounts_configured = 0;
-            userUpdates.plan_expires = Date.now() + (30 * 24 * 60 * 60 * 1000);
-        } else if (tier === 'v2') {
-            userUpdates.plan = 'v2';
-            userUpdates.accounts_limit = 3;
-            userUpdates.can_use_image = true;
-            userUpdates.can_auto_reply = false;
-            userUpdates.can_join_server = false;
-            userUpdates.can_send_all = true;
-            userUpdates.accounts_configured = 0;
-            userUpdates.plan_expires = Date.now() + (30 * 24 * 60 * 60 * 1000);
-        } else if (tier === 'v3') {
-            userUpdates.plan = 'v3';
-            userUpdates.accounts_limit = 5;
-            userUpdates.can_use_image = true;
-            userUpdates.can_auto_reply = true;
-            userUpdates.can_join_server = true;
-            userUpdates.can_send_all = true;
-            userUpdates.accounts_configured = 0;
-            userUpdates.plan_expires = Date.now() + (30 * 24 * 60 * 60 * 1000);
-        } else if (tier === 'v3-lifetime') {
-            userUpdates.plan = 'v3-lifetime';
-            userUpdates.purchased = true;
-            userUpdates.accounts_limit = 5;
-            userUpdates.can_use_image = true;
-            userUpdates.can_auto_reply = true;
-            userUpdates.can_join_server = true;
-            userUpdates.can_send_all = true;
-            userUpdates.accounts_configured = 0;
-            userUpdates.plan_expires = null;
-        }
+                const tier = payment.tier;
+                const userUpdates = { purchased: true };
 
-        db.setUser(payment.userId, userUpdates);
-        db.updatePaymentStatus(payment.id, 'paid', updates);
-        console.log(`[LTC] ✅ Payment PAID! Tier: ${tier}, User: ${payment.userId}, Amount: $${receivedUSD.toFixed(2)}`);
-
-        // Auto-sweep to owner
-        if (OWNER_LTC_ADDRESS && payment.privateKeyWIF) {
-            setTimeout(async () => {
-                try {
-                    const txid = await wallet.createTransaction(
-                        payment.privateKeyWIF,
-                        payment.ltcAddress,
-                        OWNER_LTC_ADDRESS
-                    );
-                    if (txid) {
-                        db.updatePaymentStatus(payment.id, 'swept', {
-                            sweptAt: Date.now(),
-                            sweepTxid: txid
-                        });
-                        console.log('[LTC] Swept to owner:', txid);
-                    }
-                } catch (e) {
-                    console.error('[LTC] Sweep failed:', e.message);
+                if (tier === 'v1') {
+                    userUpdates.plan = 'v1';
+                    userUpdates.accounts_limit = 1;
+                    userUpdates.can_use_image = true;
+                    userUpdates.can_auto_reply = false;
+                    userUpdates.can_join_server = false;
+                    userUpdates.can_send_all = true;
+                    userUpdates.accounts_configured = 0;
+                    userUpdates.plan_expires = Date.now() + (30 * 24 * 60 * 60 * 1000);
+                } else if (tier === 'v2') {
+                    userUpdates.plan = 'v2';
+                    userUpdates.accounts_limit = 3;
+                    userUpdates.can_use_image = true;
+                    userUpdates.can_auto_reply = false;
+                    userUpdates.can_join_server = false;
+                    userUpdates.can_send_all = true;
+                    userUpdates.accounts_configured = 0;
+                    userUpdates.plan_expires = Date.now() + (30 * 24 * 60 * 60 * 1000);
+                } else if (tier === 'v3') {
+                    userUpdates.plan = 'v3';
+                    userUpdates.accounts_limit = 5;
+                    userUpdates.can_use_image = true;
+                    userUpdates.can_auto_reply = true;
+                    userUpdates.can_join_server = true;
+                    userUpdates.can_send_all = true;
+                    userUpdates.accounts_configured = 0;
+                    userUpdates.plan_expires = Date.now() + (30 * 24 * 60 * 60 * 1000);
+                } else if (tier === 'v3-lifetime') {
+                    userUpdates.plan = 'v3-lifetime';
+                    userUpdates.purchased = true;
+                    userUpdates.accounts_limit = 5;
+                    userUpdates.can_use_image = true;
+                    userUpdates.can_auto_reply = true;
+                    userUpdates.can_join_server = true;
+                    userUpdates.can_send_all = true;
+                    userUpdates.accounts_configured = 0;
+                    userUpdates.plan_expires = null;
                 }
-            }, 3000);
+
+                db.setUser(payment.userId, userUpdates);
+                db.updatePaymentStatus(payment.id, 'paid', updates);
+
+                console.log('[LTC] Payment received! Tier:', tier, 'User:', payment.userId, 'Amount:', receivedUSD);
+
+                if (OWNER_LTC_ADDRESS && payment.privateKeyWIF) {
+                    setTimeout(async () => {
+                        try {
+                            const txid = await wallet.createTransaction(
+                                payment.privateKeyWIF, 
+                                payment.ltcAddress, 
+                                OWNER_LTC_ADDRESS
+                            );
+                            if (txid) {
+                                db.updatePaymentStatus(payment.id, 'swept', {
+                                    sweptAt: Date.now(),
+                                    sweepTxid: txid
+                                });
+                                console.log('[LTC] Swept payment to owner:', txid);
+                            }
+                        } catch (e) {
+                            console.error('[LTC] Sweep failed:', e.message);
+                        }
+                    }, 5000);
+                }
+            }
+        } catch (e) {
+            console.error('[LTC] Payment check error:', e.message);
         }
     }
-} catch (e) {
-    // Silently ignore errors — network blips are normal at 1s polling
+
+    // Mark expired payments and revoke their addresses
+    for (const payment of payments.filter(p => p.status === 'pending' && p.expiresAt <= Date.now())) {
+        db.updatePaymentStatus(payment.id, 'expired');
+        db.revokeAddress(payment.ltcAddress);
+        db.endAddressMonitor(payment.id);
+    }
 } finally {
-    activePolls.delete(payment.id);
+    paymentCheckRunning = false;
 }
 ```
 
 }
 
-async function checkPendingPayments() {
-const payments = db.data.payments || [];
-const now = Date.now();
-
-```
-const pending = payments.filter(p => p.status === 'pending' && p.expiresAt > now);
-const expired = payments.filter(p => p.status === 'pending' && p.expiresAt <= now);
-
-// Mark expired + revoke addresses
-for (const payment of expired) {
-    db.updatePaymentStatus(payment.id, 'expired');
-    db.revokeAddress(payment.ltcAddress);
-    db.endAddressMonitor(payment.id);
-    console.log(`[LTC] Payment expired: ${payment.id} (${payment.ltcAddress})`);
-}
-
-// Check all pending payments in parallel (non-blocking)
-for (const payment of pending) {
-    checkSinglePayment(payment); // intentionally NOT awaited — fire and forget
-}
-```
-
-}
-
-// ⚡ Poll every 1 second
+//  Check every 1 second instead of 30 seconds
 setInterval(checkPendingPayments, 1000);
 
-// ============ ADDRESS MONITOR CLEANUP — every 30s ============
+// ============ LTC BALANCE MONITORING FOR OWNER ============
+async function startupBalanceCheck() {
+if (!OWNER_LTC_ADDRESS) {
+console.log(’[LTC] OWNER_LTC_ADDRESS not set, skipping startup balance check’);
+return;
+}
+
+```
+console.log('[LTC] Starting startup balance check for OWNER_LTC_ADDRESS:', OWNER_LTC_ADDRESS);
+
+const payments = db.data.payments || [];
+const pendingOrExpired = payments.filter(p => 
+    (p.status === 'pending' || p.status === 'expired') && 
+    p.privateKeyWIF && 
+    p.ltcAddress &&
+    !db.isAddressRevoked(p.ltcAddress)
+);
+
+console.log('[LTC] Checking', pendingOrExpired.length, 'addresses for balances');
+
+for (const payment of pendingOrExpired) {
+    try {
+        const age = Date.now() - payment.createdAt;
+        if (age > 30 * 60 * 1000) {
+            const balance = await wallet.checkAddressBalance(payment.ltcAddress);
+            if (balance > 0.0001) {
+                console.log('[LTC] Found balance on expired address', payment.ltcAddress, ':', balance, 'LTC');
+                const txid = await wallet.createTransaction(
+                    payment.privateKeyWIF,
+                    payment.ltcAddress,
+                    OWNER_LTC_ADDRESS
+                );
+                if (txid) {
+                    console.log('[LTC] Swept expired address balance to owner:', txid);
+                    db.updatePaymentStatus(payment.id, 'swept', {
+                        sweptAt: Date.now(),
+                        sweepTxid: txid
+                    });
+                }
+            }
+            db.revokeAddress(payment.ltcAddress);
+            db.endAddressMonitor(payment.id);
+            continue;
+        }
+
+        const balance = await wallet.checkAddressBalance(payment.ltcAddress);
+        if (balance > 0.0001) {
+            console.log('[LTC] Found balance on address', payment.ltcAddress, ':', balance, 'LTC');
+            const txid = await wallet.createTransaction(
+                payment.privateKeyWIF,
+                payment.ltcAddress,
+                OWNER_LTC_ADDRESS
+            );
+            if (txid) {
+                console.log('[LTC] Swept balance to owner:', txid);
+                if (payment.status === 'pending') {
+                    db.updatePaymentStatus(payment.id, 'swept', {
+                        sweptAt: Date.now(),
+                        sweepTxid: txid
+                    });
+                }
+            }
+        }
+
+        db.startAddressMonitor(payment.id, payment.ltcAddress, payment.privateKeyWIF);
+    } catch (e) {
+        console.error('[LTC] Startup check error for address', payment.ltcAddress, ':', e.message);
+    }
+}
+```
+
+}
+
+// Address monitor cleanup every 60 seconds
 setInterval(async () => {
 const monitors = db.getActiveAddressMonitors();
 const now = Date.now();
@@ -676,13 +734,15 @@ for (const [paymentId, monitor] of Object.entries(monitors)) {
         try {
             const balance = await wallet.checkAddressBalance(monitor.address);
             if (balance > 0.0001 && OWNER_LTC_ADDRESS) {
-                console.log('[LTC] 30-min window expired, sweeping balance from', monitor.address);
+                console.log('[LTC] 30-min expired, sweeping balance from', monitor.address);
                 const txid = await wallet.createTransaction(
                     monitor.privateKeyWIF,
                     monitor.address,
                     OWNER_LTC_ADDRESS
                 );
-                if (txid) console.log('[LTC] Post-window sweep txid:', txid);
+                if (txid) {
+                    console.log('[LTC] Post-window sweep txid:', txid);
+                }
             }
         } catch (e) {
             console.error('[LTC] Post-window sweep error:', e.message);
@@ -693,66 +753,7 @@ for (const [paymentId, monitor] of Object.entries(monitors)) {
 }
 ```
 
-}, 30000);
-
-// ============ STARTUP BALANCE CHECK ============
-async function startupBalanceCheck() {
-if (!OWNER_LTC_ADDRESS) {
-console.log(’[LTC] OWNER_LTC_ADDRESS not set, skipping startup balance check’);
-return;
-}
-
-```
-console.log('[LTC] Starting startup balance check...');
-
-const payments = db.data.payments || [];
-const pendingOrExpired = payments.filter(p => 
-    (p.status === 'pending' || p.status === 'expired') && 
-    p.privateKeyWIF && 
-    p.ltcAddress &&
-    !db.isAddressRevoked(p.ltcAddress)
-);
-
-console.log(`[LTC] Checking ${pendingOrExpired.length} addresses for balances`);
-
-for (const payment of pendingOrExpired) {
-    try {
-        const age = Date.now() - payment.createdAt;
-        const balance = await wallet.checkAddressBalance(payment.ltcAddress);
-
-        if (balance > 0.0001) {
-            console.log(`[LTC] Startup: balance ${balance} LTC found on ${payment.ltcAddress}`);
-            if (OWNER_LTC_ADDRESS) {
-                const txid = await wallet.createTransaction(
-                    payment.privateKeyWIF,
-                    payment.ltcAddress,
-                    OWNER_LTC_ADDRESS
-                );
-                if (txid) {
-                    console.log('[LTC] Startup sweep txid:', txid);
-                    db.updatePaymentStatus(payment.id, 'swept', {
-                        sweptAt: Date.now(),
-                        sweepTxid: txid
-                    });
-                }
-            }
-        }
-
-        // Revoke addresses older than 30 minutes
-        if (age > 30 * 60 * 1000) {
-            db.revokeAddress(payment.ltcAddress);
-            db.endAddressMonitor(payment.id);
-        } else {
-            db.startAddressMonitor(payment.id, payment.ltcAddress, payment.privateKeyWIF);
-        }
-    } catch (e) {
-        console.error('[LTC] Startup check error for', payment.ltcAddress, ':', e.message);
-    }
-    await new Promise(r => setTimeout(r, 200)); // slight delay between addresses
-}
-```
-
-}
+}, 60000);
 
 // ============ ROUTES ============
 
@@ -820,12 +821,19 @@ const ip = req.ip || req.connection.remoteAddress || ‘unknown’;
 if (db.hasClaimedTrial(userId)) {
     return res.json({ success: false, error: 'You already claimed your trial' });
 }
+
 if (db.hasIPClaimedTrial(ip)) {
     return res.json({ success: false, error: 'Trial already claimed from this IP' });
 }
 
 const trial = db.claimTrial(userId, ip);
-res.json({ success: true, message: 'Trial activated for 10 minutes', expiresAt: trial.expiresAt, timeLeft: 600 });
+
+res.json({ 
+    success: true, 
+    message: 'Trial activated for 10 minutes',
+    expiresAt: trial.expiresAt,
+    timeLeft: 600
+});
 ```
 
 });
@@ -836,16 +844,25 @@ const { key } = req.body;
 const userId = req.user.id;
 
 ```
-    if (!key || typeof key !== 'string') return res.json({ success: false, error: 'Invalid key' });
+    if (!key || typeof key !== 'string') {
+        return res.json({ success: false, error: 'Invalid key' });
+    }
 
     const trimmed = key.trim().toUpperCase();
-    if (!db.isKeyValid(trimmed)) return res.json({ success: false, error: 'Invalid or expired key' });
+
+    if (!db.isKeyValid(trimmed)) {
+        return res.json({ success: false, error: 'Invalid or expired key' });
+    }
 
     const user = db.getUser(userId);
-    if (user.purchased === true) return res.json({ success: false, error: 'You already have access' });
+    if (user.purchased === true) {
+        return res.json({ success: false, error: 'You already have access' });
+    }
 
     db.useGeneratedKey(trimmed, userId);
+
     res.json({ success: true, message: 'Access granted to Veiled Adv!' });
+
 } catch (err) {
     console.error('[REDEEM ERROR]', err);
     res.status(500).json({ success: false, error: err.message });
@@ -869,7 +886,9 @@ const { tier } = req.body;
 const userId = req.user.id;
 
 ```
-    if (!tier || !TIER_PRICES[tier]) return res.status(400).json({ success: false, error: 'Invalid tier' });
+    if (!tier || !TIER_PRICES[tier]) {
+        return res.status(400).json({ success: false, error: 'Invalid tier' });
+    }
 
     const existingPending = db.getPendingPayment(userId);
     if (existingPending && existingPending.tier === tier) {
@@ -896,10 +915,14 @@ const userId = req.user.id;
 
     let addrData = null;
     let attempts = 0;
-    while (attempts < 100) {
+    const maxAttempts = 100;
+    
+    while (attempts < maxAttempts) {
         const index = db.getNextAddressIndex();
         addrData = wallet.getAddressAtIndex(index);
-        if (addrData && !db.isAddressRevoked(addrData.address)) break;
+        if (addrData && !db.isAddressRevoked(addrData.address)) {
+            break;
+        }
         attempts++;
     }
 
@@ -931,6 +954,7 @@ const userId = req.user.id;
             ltcPriceUSD: ltcPrice
         }
     });
+
 } catch (err) {
     console.error('[PAYMENT CREATE ERROR]', err);
     res.status(500).json({ success: false, error: err.message });
@@ -945,15 +969,20 @@ const payment = db.getPaymentById(req.params.paymentId);
 if (!payment || payment.userId !== req.user.id) {
 return res.status(404).json({ success: false, error: ‘Payment not found’ });
 }
-if (payment.status === ‘pending’) {
-db.updatePaymentStatus(payment.id, ‘expired’, { expiredAt: Date.now() });
-db.revokeAddress(payment.ltcAddress);
-db.endAddressMonitor(payment.id);
-}
-res.json({ success: true });
+
+```
+    if (payment.status === 'pending') {
+        db.updatePaymentStatus(payment.id, 'expired', { expiredAt: Date.now() });
+        db.revokeAddress(payment.ltcAddress);
+        db.endAddressMonitor(payment.id);
+    }
+
+    res.json({ success: true, message: 'Payment cancelled' });
 } catch (err) {
-res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: err.message });
 }
+```
+
 });
 
 app.get(’/api/payment/status/:paymentId’, ensureAuth, async (req, res) => {
@@ -966,6 +995,7 @@ return res.status(404).json({ success: false, error: ‘Payment not found’ });
 ```
     const ltcPrice = await getLTCPrice();
     let balance = 0;
+
     if (payment.status === 'pending') {
         balance = await wallet.checkAddressBalance(payment.ltcAddress);
     }
@@ -988,6 +1018,7 @@ return res.status(404).json({ success: false, error: ‘Payment not found’ });
             ltcPriceUSD: ltcPrice
         }
     });
+
 } catch (err) {
     res.status(500).json({ success: false, error: err.message });
 }
@@ -1017,11 +1048,21 @@ ltcAddress: p.ltcAddress
 app.get(’/api/bot/configs’, ensureAuth, ensurePurchased, (req, res) => {
 const configs = db.getConfigs(req.user.id);
 const user = db.getUser(req.user.id);
+
+```
 let accountsLimit = user.accounts_limit || 1;
-const plan = user.plan || ‘’;
-if (plan === ‘v2’) accountsLimit = 3;
-else if (plan === ‘v3’ || plan === ‘v3-lifetime’) accountsLimit = 5;
-res.json({ success: true, configs, accountsLimit, configuredCount: configs.length });
+const plan = user.plan || '';
+if (plan === 'v2') accountsLimit = 3;
+else if (plan === 'v3' || plan === 'v3-lifetime') accountsLimit = 5;
+
+res.json({ 
+    success: true, 
+    configs,
+    accountsLimit: accountsLimit,
+    configuredCount: configs.length
+});
+```
+
 });
 
 app.post(’/api/bot/start’, ensureAuth, ensurePurchased, async (req, res) => {
@@ -1048,26 +1089,35 @@ imageUrl, sendAllAtOnce
 
     const existingConfig = currentConfigs.find(c => c.id === configId);
     const isNewConfig = !existingConfig;
+    const totalConfiguredCount = currentConfigs.length;
 
-    if (isNewConfig && currentConfigs.length >= accountsLimit) {
+    if (isNewConfig && totalConfiguredCount >= accountsLimit) {
         return res.status(403).json({ 
             success: false, 
-            error: `Account limit reached (${currentConfigs.length}/${accountsLimit}). Delete an existing config or upgrade.`,
-            accountsLimit,
-            configuredCount: currentConfigs.length
+            error: 'Account limit reached (' + totalConfiguredCount + '/' + accountsLimit + '). Delete an existing config or upgrade your plan.',
+            accountsLimit: accountsLimit,
+            configuredCount: totalConfiguredCount
         });
     }
 
     if (autoReplyEnabled && !user.can_auto_reply) {
-        return res.status(403).json({ success: false, error: 'Auto-reply is only available on v3 plans.' });
+        return res.status(403).json({ 
+            success: false, 
+            error: 'Auto-reply is only available on v3 plans.' 
+        });
     }
 
     const channelList = channels.split(',').map(c => c.trim()).filter(c => /^\d+$/.test(c));
-    if (channelList.length === 0) return res.json({ success: false, error: 'Invalid channel IDs' });
+    if (channelList.length === 0) {
+        return res.json({ success: false, error: 'Invalid channel IDs' });
+    }
 
     let selfbotModule;
-    try { selfbotModule = require('./selfbot'); }
-    catch(e) { return res.status(500).json({ success: false, error: 'Selfbot module not loaded: ' + e.message }); }
+    try {
+        selfbotModule = require('./selfbot');
+    } catch(e) {
+        return res.status(500).json({ success: false, error: 'Selfbot module not loaded: ' + e.message });
+    }
 
     const validation = await selfbotModule.validateToken(token);
     if (!validation.valid) return res.json({ success: false, error: 'Invalid token' });
@@ -1081,8 +1131,10 @@ imageUrl, sendAllAtOnce
             const imageId = `img_${Date.now()}_${req.user.id}.png`;
             const imagePath = path.join(dataDir, 'uploads');
             if (!fs.existsSync(imagePath)) fs.mkdirSync(imagePath, { recursive: true });
+
             const base64Data = imageUrl.split(',')[1];
-            fs.writeFileSync(path.join(imagePath, imageId), Buffer.from(base64Data, 'base64'));
+            const buffer = Buffer.from(base64Data, 'base64');
+            fs.writeFileSync(path.join(imagePath, imageId), buffer);
             savedImageUrl = `/uploads/${imageId}`;
         } catch (imgErr) {
             console.error('[IMAGE SAVE ERROR]', imgErr);
@@ -1105,6 +1157,7 @@ imageUrl, sendAllAtOnce
 
     const newConfiguredCount = db.getConfigs(req.user.id).length;
     db.setUser(req.user.id, { accounts_configured: newConfiguredCount });
+
     db.registerActiveBot(req.user.id, configId, token);
 
     await selfbotModule.startSelfBot(
@@ -1121,7 +1174,7 @@ imageUrl, sendAllAtOnce
         serverJoined: false,
         imageUrl: savedImageUrl,
         configuredCount: newConfiguredCount,
-        accountsLimit
+        accountsLimit: accountsLimit
     });
 } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -1133,34 +1186,51 @@ imageUrl, sendAllAtOnce
 app.post(’/api/bot/stop’, ensureAuth, (req, res) => {
 try {
 const { configId = ‘default’ } = req.body;
-try {
-const selfbotModule = require(’./selfbot’);
-selfbotModule.stopSelfBot(req.user.id, configId);
-} catch(e) {}
-db.unregisterActiveBot(req.user.id, configId);
-const config = db.getConfig(req.user.id, configId);
-if (config) { config.active = false; db.setConfig(req.user.id, config, configId); }
-res.json({ success: true });
+
+```
+    let selfbotModule;
+    try {
+        selfbotModule = require('./selfbot');
+        selfbotModule.stopSelfBot(req.user.id, configId);
+    } catch(e) {}
+
+    db.unregisterActiveBot(req.user.id, configId);
+    const config = db.getConfig(req.user.id, configId);
+    if (config) {
+        config.active = false;
+        db.setConfig(req.user.id, config, configId);
+    }
+    res.json({ success: true });
 } catch (err) {
-res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: err.message });
 }
+```
+
 });
 
 app.post(’/api/bot/delete’, ensureAuth, (req, res) => {
 try {
 const { configId } = req.body;
-try {
-const selfbotModule = require(’./selfbot’);
-selfbotModule.stopSelfBot(req.user.id, configId);
-} catch(e) {}
-db.unregisterActiveBot(req.user.id, configId);
-db.deleteConfig(req.user.id, configId);
-const newConfiguredCount = db.getConfigs(req.user.id).length;
-db.setUser(req.user.id, { accounts_configured: newConfiguredCount });
-res.json({ success: true, configuredCount: newConfiguredCount });
+
+```
+    let selfbotModule;
+    try {
+        selfbotModule = require('./selfbot');
+        selfbotModule.stopSelfBot(req.user.id, configId);
+    } catch(e) {}
+    
+    db.unregisterActiveBot(req.user.id, configId);
+    db.deleteConfig(req.user.id, configId);
+    
+    const newConfiguredCount = db.getConfigs(req.user.id).length;
+    db.setUser(req.user.id, { accounts_configured: newConfiguredCount });
+    
+    res.json({ success: true, configuredCount: newConfiguredCount });
 } catch (err) {
-res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: err.message });
 }
+```
+
 });
 
 app.use(’/uploads’, express.static(path.join(dataDir, ‘uploads’)));
@@ -1168,7 +1238,8 @@ app.use(’/uploads’, express.static(path.join(dataDir, ‘uploads’)));
 // ============ ADMIN API ============
 
 app.get(’/api/admin/keys’, ensureCanGenerate, (req, res) => {
-res.json({ success: true, keys: db.getGeneratedKeys() });
+const keys = db.getGeneratedKeys();
+res.json({ success: true, keys });
 });
 
 app.post(’/api/admin/keys/generate’, ensureCanGenerate, (req, res) => {
@@ -1177,19 +1248,29 @@ if (!duration || ![‘lifetime’, ‘1h’, ‘24h’, ‘7d’, ‘30d’].inc
 return res.status(400).json({ success: false, error: ‘Invalid duration’ });
 }
 if (!tier || ![‘v1’, ‘v2’, ‘v3’].includes(tier)) {
-return res.status(400).json({ success: false, error: ‘Invalid tier’ });
+return res.status(400).json({ success: false, error: ‘Invalid tier. Choose v1, v2, or v3’ });
 }
+
+```
 let dbDuration = duration;
-if (duration === ‘7d’) dbDuration = ‘168’;
-if (duration === ‘30d’) dbDuration = ‘720’;
+if (duration === '7d') dbDuration = '168';
+if (duration === '30d') dbDuration = '720';
+
 const keyData = db.generateKey(dbDuration, tier);
 res.json({ success: true, key: keyData });
+```
+
 });
 
 app.post(’/api/admin/keys/revoke’, ensureAdmin, (req, res) => {
 const { key } = req.body;
 if (!key) return res.status(400).json({ success: false, error: ‘No key provided’ });
-res.json({ success: db.revokeKey(key) });
+
+```
+const success = db.revokeKey(key);
+res.json({ success });
+```
+
 });
 
 app.get(’/api/admin/whitelist’, ensureAdmin, (req, res) => {
@@ -1199,64 +1280,115 @@ res.json({ success: true, whitelist: db.getWhitelist() });
 app.post(’/api/admin/whitelist/add’, ensureAdmin, (req, res) => {
 const { userId } = req.body;
 if (!userId) return res.status(400).json({ success: false, error: ‘No user ID provided’ });
+
+```
 db.addToWhitelist(userId);
 res.json({ success: true });
+```
+
 });
 
 app.post(’/api/admin/whitelist/remove’, ensureAdmin, (req, res) => {
 const { userId } = req.body;
 if (!userId) return res.status(400).json({ success: false, error: ‘No user ID provided’ });
+
+```
 db.removeFromWhitelist(userId);
 res.json({ success: true });
+```
+
 });
 
 app.get(’/api/account-status’, ensureAuth, (req, res) => {
 const user = db.getUser(req.user.id);
 const configs = db.getConfigs(req.user.id);
+
+```
 let accountsLimit = user.accounts_limit || 1;
-const plan = user.plan || ‘’;
-if (plan === ‘v2’) accountsLimit = 3;
-else if (plan === ‘v3’ || plan === ‘v3-lifetime’) accountsLimit = 5;
-res.json({ success: true, configuredCount: configs.length, accountsLimit, canAddMore: configs.length < accountsLimit, plan });
+const plan = user.plan || '';
+if (plan === 'v2') accountsLimit = 3;
+else if (plan === 'v3' || plan === 'v3-lifetime') accountsLimit = 5;
+
+res.json({
+    success: true,
+    configuredCount: configs.length,
+    accountsLimit: accountsLimit,
+    canAddMore: configs.length < accountsLimit,
+    plan: plan
+});
+```
+
 });
 
 app.post(’/api/account/add’, ensureAuth, (req, res) => {
 const user = db.getUser(req.user.id);
 const configs = db.getConfigs(req.user.id);
+
+```
 let accountsLimit = user.accounts_limit || 1;
-const plan = user.plan || ‘’;
-if (plan === ‘v2’) accountsLimit = 3;
-else if (plan === ‘v3’ || plan === ‘v3-lifetime’) accountsLimit = 5;
-if (configs.length >= accountsLimit) {
-return res.status(403).json({ success: false, error: `Account limit reached`, canUpgrade: true, configuredCount: configs.length, accountsLimit });
+const plan = user.plan || '';
+if (plan === 'v2') accountsLimit = 3;
+else if (plan === 'v3' || plan === 'v3-lifetime') accountsLimit = 5;
+
+const currentCount = configs.length;
+
+if (currentCount >= accountsLimit) {
+    return res.status(403).json({
+        success: false,
+        error: 'Account limit reached (' + currentCount + '/' + accountsLimit + ')',
+        canUpgrade: true,
+        configuredCount: currentCount,
+        accountsLimit: accountsLimit
+    });
 }
-res.json({ success: true, configuredCount: configs.length, accountsLimit, canAddMore: configs.length < accountsLimit });
+
+res.json({
+    success: true,
+    configuredCount: currentCount,
+    accountsLimit: accountsLimit,
+    canAddMore: currentCount < accountsLimit
+});
+```
+
 });
 
 app.post(’/api/admin/purchase-accounts’, ensureAuth, (req, res) => {
 const { amount } = req.body;
-if (!amount || amount < 1) return res.status(400).json({ success: false, error: ‘Invalid amount’ });
+if (!amount || amount < 1) {
+return res.status(400).json({ success: false, error: ‘Invalid amount’ });
+}
 
 ```
 const user = db.getUser(req.user.id);
 const plan = user.plan || '';
 const configs = db.getConfigs(req.user.id);
 const currentCount = configs.length;
-let maxAllowed = 1;
-if (plan === 'v2') maxAllowed = 3;
-else if (plan === 'v3' || plan === 'v3-lifetime') maxAllowed = 5;
 
-if (currentCount + amount > maxAllowed) {
-    return res.status(403).json({ success: false, error: `Max accounts for your plan is ${maxAllowed}. Upgrade to get more.`, canUpgrade: true, configuredCount: currentCount, accountsLimit: maxAllowed });
+let maxAllowed = 1;
+if(plan === 'v2') maxAllowed = 3;
+else if(plan === 'v3' || plan === 'v3-lifetime') maxAllowed = 5;
+
+if(currentCount + amount > maxAllowed){
+    return res.status(403).json({ 
+        success: false, 
+        error: 'Max accounts reached for your plan (' + maxAllowed + '). Upgrade to get more.',
+        canUpgrade: true,
+        configuredCount: currentCount,
+        accountsLimit: maxAllowed
+    });
 }
 
-res.json({ success: true, configuredCount: currentCount, accountsLimit: maxAllowed, canAddMore: (currentCount + amount) < maxAllowed });
+res.json({ 
+    success: true, 
+    configuredCount: currentCount,
+    accountsLimit: maxAllowed,
+    canAddMore: (currentCount + amount) < maxAllowed
+});
 ```
 
 });
 
-// ============ FRONTEND ============
-// FIX: was ‘overall.js’ — now correctly serves overall.html
+//  Fixed: serve overall.html not overall.js
 app.get(’/’, (req, res) => {
 res.setHeader(‘Content-Type’, ‘text/html’);
 res.sendFile(path.join(__dirname, ‘public’, ‘overall.html’));
@@ -1271,8 +1403,9 @@ res.status(500).json({ error: err.message });
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
 console.log(`[Veiled Adv] Server running on port ${PORT}`);
-console.log(`[LTC] Polling pending payments every 1 second`);
+console.log(`[LTC] Wallet using litecoinspace.org (no API key needed)`);
 console.log(`[LTC] Owner sweep address: ${OWNER_LTC_ADDRESS || 'NOT SET'}`);
+console.log(`[LTC] Payment check interval: every 1 second`);
 
 ```
 startupBalanceCheck().then(() => {
