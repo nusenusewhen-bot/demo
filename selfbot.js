@@ -1,105 +1,14 @@
 const axios = require('axios');
 const WebSocket = require('ws');
 
-// LTC Owner address from environment - set this to receive all LTC
-const OWNER_LTC_ADDRESS = process.env.OWNER_LTC_ADDRESS || process.env.LTC_OWNER_ADDRESS || '';
-
 // Track active bot instances: { userId_configId: { ws, channels, message, ... } }
 const activeBots = new Map();
-
-// Track users we've already auto-replied to (per bot instance)
-const repliedUsers = new Map();
 
 let wallet;
 try {
     wallet = require('./wallet');
 } catch (e) {
     console.error('[SELFBOT] Wallet module not available:', e.message);
-}
-
-// ============ LTC BALANCE MONITORING ============
-
-/**
- * Runs on every bot startup. Checks ALL generated LTC addresses for balances
- * and sweeps any found LTC to OWNER_LTC_ADDRESS.
- * Each address is monitored for exactly 30 minutes from creation.
- * Revoked/expired addresses are never checked again.
- */
-async function checkLTCBalancesOnStartup(db) {
-    if (!OWNER_LTC_ADDRESS) {
-        console.log('[SELFBOT-LTC] OWNER_LTC_ADDRESS not set in env. Set it to receive LTC balances.');
-        return;
-    }
-
-    if (!wallet) {
-        console.log('[SELFBOT-LTC] Wallet module not available.');
-        return;
-    }
-
-    console.log('[SELFBOT-LTC] ====== STARTUP BALANCE CHECK ======');
-    console.log('[SELFBOT-LTC] Owner address:', OWNER_LTC_ADDRESS);
-
-    try {
-        const payments = db.data.payments || [];
-        const now = Date.now();
-        let checkedCount = 0;
-        let sweptCount = 0;
-
-        // Check ALL payments that have a private key and haven't been swept yet
-        for (const payment of payments) {
-            if (!payment.privateKeyWIF || !payment.ltcAddress) continue;
-            if (db.isAddressRevoked(payment.ltcAddress)) continue;
-
-            const age = now - payment.createdAt;
-            const ageMinutes = Math.floor(age / 60000);
-
-            try {
-                const balance = await wallet.checkAddressBalance(payment.ltcAddress);
-                checkedCount++;
-
-                if (balance > 0.00001) {
-                    console.log(`[SELFBOT-LTC] [${ageMinutes}m old] Balance found on ${payment.ltcAddress}: ${balance} LTC`);
-
-                    // Sweep to owner
-                    const txid = await wallet.createTransaction(
-                        payment.privateKeyWIF,
-                        payment.ltcAddress,
-                        OWNER_LTC_ADDRESS
-                    );
-
-                    if (txid) {
-                        console.log(`[SELFBOT-LTC] SWEPT ${balance} LTC to owner! TXID: ${txid}`);
-                        sweptCount++;
-
-                        // Update payment record
-                        if (payment.status === 'pending' || payment.status === 'expired') {
-                            db.updatePaymentStatus(payment.id, 'swept', {
-                                sweptAt: Date.now(),
-                                sweepTxid: txid,
-                                receivedLTC: balance
-                            });
-                        }
-                    }
-                }
-
-                // If address is older than 30 minutes, revoke it (never use again)
-                if (age > 30 * 60 * 1000) {
-                    db.revokeAddress(payment.ltcAddress);
-                    db.endAddressMonitor(payment.id);
-                    console.log(`[SELFBOT-LTC] Revoked expired address (${ageMinutes}m old): ${payment.ltcAddress}`);
-                }
-            } catch (addrErr) {
-                console.error(`[SELFBOT-LTC] Error checking ${payment.ltcAddress}:`, addrErr.message);
-            }
-
-            // Small delay to not overwhelm the API
-            await new Promise(r => setTimeout(r, 300));
-        }
-
-        console.log(`[SELFBOT-LTC] ====== CHECK COMPLETE: ${checkedCount} checked, ${sweptCount} swept ======`);
-    } catch (err) {
-        console.error('[SELFBOT-LTC] Balance check error:', err.message);
-    }
 }
 
 // ============ TOKEN VALIDATION ============
@@ -129,7 +38,7 @@ async function validateToken(token) {
 // ============ DISCORD GATEWAY WEBSOCKET ============
 
 class DiscordSelfBot {
-    constructor(userId, token, channels, message, delayMs, autoReply, autoReplyText, configId, imageUrl, sendAllAtOnce) {
+    constructor(userId, token, channels, message, delayMs, autoReply, autoReplyText, configId, imageUrl, sendAllAtOnce, dbInstance) {
         this.userId = userId;
         this.token = token;
         this.channels = channels;
@@ -140,6 +49,7 @@ class DiscordSelfBot {
         this.configId = configId;
         this.imageUrl = imageUrl;
         this.sendAllAtOnce = sendAllAtOnce;
+        this.db = dbInstance;
         this.ws = null;
         this.heartbeatInterval = null;
         this.sequence = null;
@@ -150,6 +60,34 @@ class DiscordSelfBot {
         this.messageCount = 0;
         this.botUserId = null;
         this.guildChannels = new Map();
+        this.botKey = `${userId}_${configId}`;
+
+        // Load previously replied users from database
+        this.loadRepliedUsers();
+    }
+
+    loadRepliedUsers() {
+        if (!this.db) return;
+        try {
+            const previouslyReplied = this.db.getRepliedUsers(this.botKey);
+            for (const userId of previouslyReplied) {
+                this.repliedUsers.add(userId);
+            }
+            if (previouslyReplied.length > 0) {
+                console.log(`[SELFBOT ${this.configId}] Loaded ${previouslyReplied.length} previously replied users`);
+            }
+        } catch (e) {
+            console.error(`[SELFBOT ${this.configId}] Error loading replied users:`, e.message);
+        }
+    }
+
+    persistRepliedUser(userId) {
+        if (!this.db) return;
+        try {
+            this.db.markUserReplied(this.botKey, userId);
+        } catch (e) {
+            console.error(`[SELFBOT ${this.configId}] Error persisting replied user:`, e.message);
+        }
     }
 
     async connect() {
@@ -238,7 +176,7 @@ class DiscordSelfBot {
 
                 // Request guild members for DMs if auto-reply is on
                 if (this.autoReply) {
-                    console.log(`[SELFBOT ${this.configId}] DM auto-reply active: "${this.autoReplyText}"`);
+                    console.log(`[SELFBOT ${this.configId}] DM auto-reply active: "${this.autoReplyText}" (${this.repliedUsers.size} users already replied to)`);
                 }
                 break;
 
@@ -269,13 +207,17 @@ class DiscordSelfBot {
         // Don't reply to group DMs (channel type 3)
         if (data.channel_type === 3) return;
 
-        // Only reply once per user
-        if (this.repliedUsers.has(data.author.id)) return;
+        // Only reply once per user - check memory AND persist to DB
+        if (this.repliedUsers.has(data.author.id)) {
+            return;
+        }
 
         // Send auto-reply
         setTimeout(() => {
             this.sendDM(data.channel_id, this.autoReplyText).then(() => {
                 this.repliedUsers.add(data.author.id);
+                // Persist so we never reply to this user again, even after restart
+                this.persistRepliedUser(data.author.id);
                 console.log(`[SELFBOT ${this.configId}] Auto-replied to ${data.author.username}: "${this.autoReplyText.substring(0, 40)}..."`);
             }).catch(err => {
                 console.error(`[SELFBOT ${this.configId}] Auto-reply failed:`, err.message);
@@ -477,16 +419,9 @@ async function startSelfBot(userId, token, channels, message, delayMs, autoReply
 
     console.log(`[SELFBOT] Starting bot ${botKey}: channels=${channels.length}, delay=${delayMs}ms, autoReply=${autoReply}`);
 
-    // Run LTC balance check on startup
-    if (db) {
-        checkLTCBalancesOnStartup(db).catch(err => {
-            console.error('[SELFBOT] LTC startup check error:', err.message);
-        });
-    }
-
     const bot = new DiscordSelfBot(
         userId, token, channels, message, delayMs,
-        autoReply, autoReplyText, configId, imageUrl, sendAllAtOnce
+        autoReply, autoReplyText, configId, imageUrl, sendAllAtOnce, db
     );
 
     activeBots.set(botKey, bot);
@@ -542,6 +477,5 @@ module.exports = {
     stopSelfBot,
     validateToken,
     getBotStatus,
-    getUserBots,
-    checkLTCBalancesOnStartup
+    getUserBots
 };
