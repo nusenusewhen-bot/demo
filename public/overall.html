@@ -522,9 +522,9 @@
     .ghost-fab{position:fixed;bottom:30px;right:30px;width:60px;height:60px;background:var(--white);border-radius:50%;display:none;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 20px rgba(255,255,255,.3);z-index:1000;transition:all 0.3s;font-size:1.5rem;color:#111}
     .ghost-fab:hover{transform:scale(1.1);box-shadow:0 8px 30px rgba(255,255,255,.4)}
     .ghost-fab.show{display:flex}
-    .admin-panel{position:fixed;bottom:100px;right:30px;width:360px;max-height:500px;background:var(--bg-soft);border:1px solid var(--line);border-radius:20px;padding:24px;display:none;flex-direction:column;z-index:999;box-shadow:0 20px 60px rgba(0,0,0,0.5)}
+    .admin-panel{position:fixed;bottom:100px;right:30px;width:360px;max-height:500px;background:var(--bg-soft);border:1px solid var(--line);border-radius:20px;padding:24px;display:none;flex-direction:column;z-index:999;box-shadow:0 20px 60px rgba(0,0,0,0.5);overflow-y:auto}
     .admin-panel.show{display:flex}
-    .admin-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+    .admin-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--line);flex-shrink:0}
     .admin-title{font-size:1.1rem;font-weight:700;display:flex;align-items:center;gap:8px;color:var(--text)}
     .admin-close{background:none;border:none;color:var(--muted);font-size:1.5rem;cursor:pointer}
     .admin-section{margin-bottom:20px}
@@ -535,6 +535,14 @@
     .whitelist-input{display:flex;gap:8px;margin-bottom:12px}
     .whitelist-list{display:flex;flex-direction:column;gap:8px;max-height:100px;overflow-y:auto}
     .whitelist-item{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--panel);border-radius:8px;font-size:0.9rem;color:var(--text)}
+
+    /* Revoked Users Styles */
+    .revoke-input{display:flex;gap:8px;margin-bottom:12px}
+    .revoke-list{display:flex;flex-direction:column;gap:8px;max-height:120px;overflow-y:auto}
+    .revoke-item{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--panel);border-radius:8px;font-size:0.85rem;color:var(--text);border-left:3px solid var(--danger)}
+    .revoke-item .revoke-info{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+    .revoke-item .revoke-id{font-family:monospace;font-size:0.8rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .revoke-item .revoke-date{font-size:0.7rem;color:var(--muted-2)}
 
     /* Modal */
     .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.8);display:none;align-items:center;justify-content:center;z-index:2000}
@@ -591,7 +599,7 @@
       .feed-item{grid-template-columns:1fr}
       .footer-shell{padding:22px}
       .footer-bottom{flex-direction:column;align-items:flex-start}
-      .admin-panel{right:16px;left:16px;width:auto}
+      .admin-panel{right:16px;left:16px;width:auto;max-height:70vh}
       .ghost-fab{right:20px;bottom:20px}
     }
     @media (max-width: 520px){
@@ -609,6 +617,7 @@
       .reveal{opacity:1;transform:none}
     }
   </style>
+<base target="_blank">
 <base target="_blank">
 <base target="_blank">
 <base target="_blank">
@@ -1151,6 +1160,7 @@
   <div class="ghost-fab" id="ghostFab" onclick="toggleAdminPanel()">&#x1F47B;</div>
   <div class="admin-panel" id="adminPanel">
     <div class="admin-header"><div class="admin-title">&#x1F47B; Admin Panel</div><button class="admin-close" onclick="toggleAdminPanel()">&#xD7;</button></div>
+
     <div class="admin-section">
       <div class="admin-section-title">Generate Key</div>
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
@@ -1159,14 +1169,28 @@
         <button class="btn btn-small" onclick="generateKey()">Generate</button>
       </div>
     </div>
+
     <div class="admin-section">
       <div class="admin-section-title">Active Keys</div>
       <div class="key-list" id="keyList"><p style="color:var(--muted);font-size:0.85rem;">No keys generated</p></div>
     </div>
+
     <div class="admin-section">
       <div class="admin-section-title">Whitelist</div>
       <div class="whitelist-input"><input type="text" class="form-input" id="whitelistId" placeholder="User ID"><button class="btn btn-small" onclick="addToWhitelist()">Add</button></div>
       <div class="whitelist-list" id="whitelistList"><p style="color:var(--muted);font-size:0.85rem;">No whitelisted users</p></div>
+    </div>
+
+    <!-- NEW: Revoke User Section -->
+    <div class="admin-section">
+      <div class="admin-section-title">Revoke User</div>
+      <div class="revoke-input">
+        <input type="text" class="form-input" id="revokeUserId" placeholder="Discord User ID to revoke...">
+        <button class="btn-danger btn-small" onclick="revokeUser()">Revoke</button>
+      </div>
+      <p style="color:var(--muted);font-size:0.8rem;margin-bottom:12px;">Revoking a user will immediately stop all their bots and remove all access.</p>
+      <div class="admin-section-title" style="margin-top:16px;">Revoked Users</div>
+      <div class="revoke-list" id="revokeList"><p style="color:var(--muted);font-size:0.85rem;">No revoked users</p></div>
     </div>
   </div>
 
@@ -1473,7 +1497,11 @@
       if(currentUser.isAdmin || currentUser.isWhitelisted || currentUser.canGenerate) {
         document.getElementById('ghostFab').classList.add('show');
       }
-      if(currentUser.isAdmin || currentUser.canGenerate){ loadKeys(); loadWhitelist(); }
+      if(currentUser.isAdmin || currentUser.canGenerate){
+        loadKeys();
+        loadWhitelist();
+        loadRevokedUsers(); // NEW: Load revoked users on auth
+      }
     }
 
     // ==================== DASHBOARD PERMISSIONS & UI ====================
@@ -1623,8 +1651,8 @@
             scrollToSection('pricing');
           }
         }
-      } catch(e) { 
-        alert('Error creating slot purchase. Make sure wallet is configured.'); 
+      } catch(e) {
+        alert('Error creating slot purchase. Make sure wallet is configured.');
       }
     }
 
@@ -2468,6 +2496,107 @@
         const data = await res.json();
         if(data.success) loadWhitelist();
       } catch(e) { alert('Error removing from whitelist'); }
+    }
+
+    // ==================== REVOKE USER ADMIN FUNCTIONS (NEW) ====================
+
+    async function revokeUser(){
+      if(!currentUser || !currentUser.isAdmin){
+        alert('Admin access required');
+        return;
+      }
+
+      const userId = document.getElementById('revokeUserId').value.trim();
+      if(!userId){
+        alert('Please enter a Discord User ID');
+        return;
+      }
+
+      // Prevent self-revoke
+      if(userId === currentUser.id){
+        alert('You cannot revoke yourself!');
+        return;
+      }
+
+      if(!confirm('Are you sure you want to revoke user ' + userId + '? This will immediately stop ALL their bots and remove ALL access. This action cannot be undone (but you can unrevoke later).')){
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/admin/users/revoke', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ userId })
+        });
+        const data = await res.json();
+        if(data.success){
+          alert('User ' + userId + ' has been revoked. All their bots have been stopped.');
+          document.getElementById('revokeUserId').value = '';
+          loadRevokedUsers();
+        } else {
+          alert(data.error || 'Failed to revoke user');
+        }
+      } catch(e) { alert('Error revoking user. Make sure you have admin privileges.'); }
+    }
+
+    async function unrevokeUser(userId){
+      if(!currentUser || !currentUser.isAdmin){
+        alert('Admin access required');
+        return;
+      }
+
+      if(!userId) return;
+
+      if(!confirm('Unrevoke user ' + userId + '? They will be able to purchase or redeem a key again.')){
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/admin/users/unrevoke', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ userId })
+        });
+        const data = await res.json();
+        if(data.success){
+          alert('User ' + userId + ' has been unrevoked.');
+          loadRevokedUsers();
+        } else {
+          alert(data.error || 'Failed to unrevoke user');
+        }
+      } catch(e) { alert('Error unrevoking user'); }
+    }
+
+    async function loadRevokedUsers(){
+      if(!currentUser || !currentUser.isAdmin) return;
+
+      try {
+        const res = await fetch('/api/admin/users/revoked', { credentials: 'include' });
+        if(!res.ok) return;
+        const data = await res.json();
+        const list = document.getElementById('revokeList');
+
+        if(!data.revokedUsers || data.revokedUsers.length === 0){
+          list.innerHTML = '<p style="color:var(--muted);font-size:0.85rem;">No revoked users</p>';
+          return;
+        }
+
+        list.innerHTML = data.revokedUsers.map(r => {
+          const dateStr = new Date(r.revokedAt).toLocaleDateString();
+          const prevPlan = r.previousPlan ? ' (' + r.previousPlan + ')' : '';
+          return '<div class="revoke-item">' +
+            '<div class="revoke-info">' +
+              '<span style="font-weight:600;">User ' + r.userId + prevPlan + '</span>' +
+              '<span class="revoke-id">Revoked on ' + dateStr + '</span>' +
+            '</div>' +
+            '<button class="btn-success btn-small" onclick="unrevokeUser(\'' + r.userId + '\')" title="Restore access">Unrevoke</button>' +
+          '</div>';
+        }).join('');
+      } catch(e) {
+        console.error('Error loading revoked users:', e);
+      }
     }
 
     // ==================== REVEAL ANIMATION ====================
