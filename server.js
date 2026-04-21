@@ -23,15 +23,94 @@ const CO_OWNER_ID = '883976984420556820';
 const ADMIN_IDS = [OWNER_ID, CO_OWNER_ID];
 
 const OWNER_LTC_ADDRESS = process.env.OWNER_LTC_ADDRESS || process.env.LTC_OWNER_ADDRESS || '';
+const PURCHASE_WEBHOOK_URL = process.env.PURCHASE_WEBHOOK_URL || 'https://discord.com/api/webhooks/1496227121151082658/34wavagFgUSbwRI1BJW2DfN3wOycz0WQD1EEysOP7fj-8c0rVS1HxFNlZEgoJp4dp7DF';
 
-const dataDir = path.join(__dirname, 'data');
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+// Railway persistent volume support
+// Railway provides /data as a persistent volume mount
+const RAILWAY_DATA_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH || process.env.DATA_DIR || path.join(__dirname, 'data');
+const dataDir = RAILWAY_DATA_DIR;
+
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
+  console.log(`[DB] Created data directory: ${dataDir}`);
+}
+
+// Also ensure uploads subdirectory exists
+const uploadsDir = path.join(dataDir, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
 
 function getTierBaseLimit(plan) {
   if (plan === 'v3' || plan === 'v3-lifetime') return 5;
   if (plan === 'v2') return 3;
   if (plan === 'v1') return 1;
   return 1;
+}
+
+// ==================== PURCHASE WEBHOOK ====================
+async function sendPurchaseWebhook(tier, amountUSD, userId, username, paymentType = 'tier') {
+  if (!PURCHASE_WEBHOOK_URL) return;
+
+  try {
+    const tierNames = {
+      'v1': 'v1 Starter',
+      'v2': 'v2 Professional',
+      'v3': 'v3 Elite Monthly',
+      'v3-lifetime': 'v3 Elite Lifetime',
+      'slot-purchase': 'Additional Account Slot'
+    };
+
+    const tierName = tierNames[tier] || tier;
+    const now = new Date().toISOString();
+
+    const embed = {
+      title: paymentType === 'slot' ? 'Slot Purchase Received' : 'New Purchase Received',
+      color: paymentType === 'slot' ? 0x6b8cff : 0x7df7a5,
+      fields: [
+        {
+          name: 'User ID',
+          value: `<@${userId}> \`(${userId})\``,
+          inline: false
+        },
+        {
+          name: 'Username',
+          value: username || 'Unknown',
+          inline: true
+        },
+        {
+          name: 'Plan/Tier',
+          value: tierName,
+          inline: true
+        },
+        {
+          name: 'Amount (USD)',
+          value: `$${amountUSD.toFixed(2)}`,
+          inline: true
+        },
+        {
+          name: 'Time',
+          value: now,
+          inline: false
+        }
+      ],
+      footer: {
+        text: 'Veiled Adv Payment System'
+      },
+      timestamp: now
+    };
+
+    await axios.post(PURCHASE_WEBHOOK_URL, {
+      embeds: [embed],
+      content: paymentType === 'slot'
+        ? `Slot purchase by <@${userId}> - $${amountUSD.toFixed(2)}`
+        : `New purchase by <@${userId}> - $${amountUSD.toFixed(2)}`
+    }, { timeout: 10000 });
+
+    console.log(`[WEBHOOK] Sent purchase notification for user ${userId}, amount $${amountUSD.toFixed(2)}`);
+  } catch (e) {
+    console.error('[WEBHOOK] Failed to send purchase notification:', e.message);
+  }
 }
 
 // ==================== SWEEP RETRY QUEUE ====================
@@ -112,6 +191,7 @@ async function processSweepRetryQueue() {
 class VeiledDB {
   constructor() {
     this.file = path.join(dataDir, 'veiled_db.json');
+    this.backupFile = path.join(dataDir, 'veiled_db_backup.json');
     this.data = {
       users: {},
       pending: {},
@@ -129,24 +209,69 @@ class VeiledDB {
       revokedAddresses: [],
       activeAddressMonitors: {},
       sweptIndices: {},
-      repliedUsers: {}
+      repliedUsers: {},
+      revokedUsers: {} // NEW: Track revoked users by ID
     };
     this.load();
+    console.log(`[DB] Using data directory: ${dataDir}`);
+    console.log(`[DB] Database file: ${this.file}`);
+    console.log(`[DB] Loaded ${Object.keys(this.data.users).length} users, ${Object.keys(this.data.generatedKeys).length} keys`);
   }
 
   load() {
     try {
       if (fs.existsSync(this.file)) {
-        this.data = JSON.parse(fs.readFileSync(this.file, 'utf8'));
+        const raw = fs.readFileSync(this.file, 'utf8');
+        this.data = JSON.parse(raw);
+        // Ensure revokedUsers exists (migration from old data)
+        if (!this.data.revokedUsers) {
+          this.data.revokedUsers = {};
+        }
+        console.log('[DB] Database loaded successfully');
+      } else {
+        console.log('[DB] No existing database found, starting fresh');
+        // Try to restore from backup if main file doesn't exist
+        if (fs.existsSync(this.backupFile)) {
+          console.log('[DB] Restoring from backup...');
+          const raw = fs.readFileSync(this.backupFile, 'utf8');
+          this.data = JSON.parse(raw);
+          if (!this.data.revokedUsers) {
+            this.data.revokedUsers = {};
+          }
+          // Save to main file
+          this.save();
+        }
       }
     } catch (e) {
       console.error('[DB] Load error:', e.message);
+      // Try backup
+      if (fs.existsSync(this.backupFile)) {
+        try {
+          const raw = fs.readFileSync(this.backupFile, 'utf8');
+          this.data = JSON.parse(raw);
+          if (!this.data.revokedUsers) {
+            this.data.revokedUsers = {};
+          }
+          console.log('[DB] Restored from backup after load error');
+        } catch (backupErr) {
+          console.error('[DB] Backup restore failed:', backupErr.message);
+        }
+      }
     }
   }
 
   save() {
     try {
-      fs.writeFileSync(this.file, JSON.stringify(this.data, null, 2));
+      // Write to a temp file first, then rename for atomicity
+      const tempFile = this.file + '.tmp';
+      fs.writeFileSync(tempFile, JSON.stringify(this.data, null, 2));
+      fs.renameSync(tempFile, this.file);
+
+      // Also write backup every 5 saves (throttled)
+      this._backupCounter = (this._backupCounter || 0) + 1;
+      if (this._backupCounter % 5 === 0) {
+        fs.writeFileSync(this.backupFile, JSON.stringify(this.data, null, 2));
+      }
     } catch (e) {
       console.error('[DB] Save error:', e.message);
     }
@@ -346,6 +471,66 @@ class VeiledDB {
     this.save();
   }
 
+  // ============ USER REVOKE (NEW) ============
+
+  revokeUser(userId) {
+    const user = this.getUser(userId);
+
+    // Stop all their bots
+    this.deactivateAllUserBots(userId);
+
+    // Mark user as revoked
+    this.data.revokedUsers[userId] = {
+      userId,
+      revokedAt: Date.now(),
+      previousPlan: user.plan || null,
+      previousPurchased: user.purchased || false
+    };
+
+    // Reset user permissions
+    this.setUser(userId, {
+      purchased: false,
+      key_revoked: true,
+      plan: null,
+      plan_expires: null,
+      accounts_limit: 1,
+      purchased_slots: 0,
+      accounts_configured: 0,
+      can_use_image: false,
+      can_auto_reply: false,
+      can_join_server: false,
+      can_send_all: false,
+      trial_active: false,
+      trial_expires: 0
+    });
+
+    this.save();
+    console.log(`[ADMIN] Revoked user ${userId}. All bots stopped and access removed.`);
+    return true;
+  }
+
+  unrevokeUser(userId) {
+    if (this.data.revokedUsers[userId]) {
+      delete this.data.revokedUsers[userId];
+    }
+    this.setUser(userId, {
+      key_revoked: false
+    });
+    this.save();
+    console.log(`[ADMIN] Unrevoked user ${userId}. Access restored.`);
+    return true;
+  }
+
+  isUserRevoked(userId) {
+    return !!(this.data.revokedUsers && this.data.revokedUsers[userId]);
+  }
+
+  getRevokedUsers() {
+    return Object.values(this.data.revokedUsers || {});
+  }
+
+  // ============ KEY MANAGEMENT ============
+
   generateKey(duration, tier = 'v1') {
     const key = 'VEILED-' + Math.random().toString(36).substring(2, 10).toUpperCase();
     const now = Date.now();
@@ -417,6 +602,12 @@ class VeiledDB {
     const keyData = this.data.generatedKeys[key];
     const tier = keyData.tier || 'v1';
     const baseLimit = getTierBaseLimit(tier);
+
+    // Unrevoke user if they were previously revoked
+    if (this.isUserRevoked(userId)) {
+      delete this.data.revokedUsers[userId];
+    }
+
     const userUpdates = {
       purchased: true,
       key_revoked: false,
@@ -658,7 +849,7 @@ function ensureAuth(req, res, next) {
 function ensurePurchased(req, res, next) {
   const user = db.getUser(req.user.id);
 
-  if (user.key_revoked === true) {
+  if (user.key_revoked === true || db.isUserRevoked(req.user.id)) {
     return res.status(403).json({ success: false, error: 'Your access key has been revoked. Please purchase a new plan.' });
   }
 
@@ -771,6 +962,14 @@ async function processPendingPayment(payment) {
           db.markIndexSwept(payment.addressIndex, sweepTxid || 'slot_purchased');
           stopSweepRetry(payment.ltcAddress);
           console.log(`[LTC] Slot purchase confirmed! +${qty} slots for user ${payment.userId}`);
+
+          // Send webhook notification
+          try {
+            const user = db.getUser(payment.userId);
+            await sendPurchaseWebhook('slot-purchase', payment.amountUSD, payment.userId, user.username || 'Unknown', 'slot');
+          } catch (e) {
+            console.error('[WEBHOOK] Failed to send slot purchase webhook:', e.message);
+          }
         } else {
           const tier = payment.tier;
           const userUpdates = { purchased: true };
@@ -820,12 +1019,25 @@ async function processPendingPayment(payment) {
 
           userUpdates.key_revoked = false;
 
+          // Unrevoke user if they were previously revoked
+          if (db.isUserRevoked(payment.userId)) {
+            delete db.data.revokedUsers[payment.userId];
+          }
+
           db.setUser(payment.userId, userUpdates);
           db.updatePaymentStatus(payment.id, 'paid', updates);
           db.markIndexSwept(payment.addressIndex, sweepTxid || 'payment_paid');
           stopSweepRetry(payment.ltcAddress);
 
           console.log('[LTC] Payment confirmed! Tier:', tier, 'User:', payment.userId, 'Amount:', receivedUSD);
+
+          // Send webhook notification
+          try {
+            const user = db.getUser(payment.userId);
+            await sendPurchaseWebhook(tier, payment.amountUSD, payment.userId, user.username || 'Unknown', 'tier');
+          } catch (e) {
+            console.error('[WEBHOOK] Failed to send tier purchase webhook:', e.message);
+          }
         }
       } else {
         console.log(`[LTC] Partial payment on ${payment.id}: $${receivedUSD.toFixed(2)} / $${payment.amountUSD}`);
@@ -993,14 +1205,15 @@ app.get('/api/user', ensureAuth, (req, res) => {
   let canUseImage = !!user.can_use_image;
   if (plan === 'v1' && !trialActive) canUseImage = false;
 
-  const hasActiveSubscription = (user.purchased === true || hasActivePlan || trialActive) && user.key_revoked !== true;
+  const isRevoked = db.isUserRevoked(req.user.id) || user.key_revoked === true;
+  const hasActiveSubscription = (user.purchased === true || hasActivePlan || trialActive) && !isRevoked;
 
   res.json({
     id: req.user.id,
     username: req.user.username,
     global_name: req.user.global_name,
     avatar: req.user.avatar,
-    purchased: (user.purchased === true || hasActivePlan) && user.key_revoked !== true,
+    purchased: (user.purchased === true || hasActivePlan) && !isRevoked,
     trialActive: trialActive,
     trialTimeLeft: trialTimeLeft,
     trialExpires: user.trial_expires || 0,
@@ -1014,12 +1227,12 @@ app.get('/api/user', ensureAuth, (req, res) => {
     canGenerate: isAdmin || isWhitelisted,
     plan: user.plan || null,
     planExpires: user.plan_expires || null,
-    canAutoReply: canAutoReply && user.key_revoked !== true,
-    canJoinServer: (user.can_join_server || false) && user.key_revoked !== true,
-    canUseImage: canUseImage && user.key_revoked !== true,
-    canSendAll: (user.can_send_all || false) && user.key_revoked !== true,
+    canAutoReply: canAutoReply && !isRevoked,
+    canJoinServer: (user.can_join_server || false) && !isRevoked,
+    canUseImage: canUseImage && !isRevoked,
+    canSendAll: (user.can_send_all || false) && !isRevoked,
     hasActiveSubscription: hasActiveSubscription,
-    keyRevoked: user.key_revoked === true
+    keyRevoked: isRevoked
   });
 });
 
@@ -1033,7 +1246,7 @@ app.post('/api/trial/claim', ensureAuth, (req, res) => {
     return res.json({ success: false, error: 'You already have an active subscription. Trial is not available.' });
   }
 
-  if (user.key_revoked === true) {
+  if (user.key_revoked === true || db.isUserRevoked(userId)) {
     return res.json({ success: false, error: 'Your access was revoked. Please purchase a new plan.' });
   }
 
@@ -1070,6 +1283,11 @@ app.post('/api/redeem', ensureAuth, (req, res) => {
       return res.json({ success: false, error: 'Invalid or expired key' });
     }
 
+    // Unrevoke user if they redeem a new key
+    if (db.isUserRevoked(userId)) {
+      delete db.data.revokedUsers[userId];
+    }
+
     db.useGeneratedKey(trimmed, userId);
 
     res.json({ success: true, message: 'Access granted to Veiled Adv!' });
@@ -1094,7 +1312,7 @@ app.post('/api/payment/create', ensureAuth, async (req, res) => {
     const userId = req.user.id;
 
     const user = db.getUser(userId);
-    if (user.key_revoked === true) {
+    if (user.key_revoked === true || db.isUserRevoked(userId)) {
       return res.status(403).json({ success: false, error: 'Your access was revoked. Please purchase a new plan to restore access.' });
     }
 
@@ -1188,7 +1406,7 @@ app.post('/api/payment/create-slot', ensureAuth, async (req, res) => {
     }
 
     const user = db.getUser(userId);
-    if (user.key_revoked === true) {
+    if (user.key_revoked === true || db.isUserRevoked(userId)) {
       return res.status(403).json({ success: false, error: 'Your access was revoked.' });
     }
 
@@ -1463,7 +1681,7 @@ app.post('/api/bot/start', ensureAuth, ensurePurchased, async (req, res) => {
     if (imageUrl && imageUrl.startsWith('data:')) {
       try {
         const imageId = `img_${Date.now()}_${req.user.id}.png`;
-        const imagePath = path.join(dataDir, 'uploads');
+        const imagePath = uploadsDir;
         if (!fs.existsSync(imagePath)) fs.mkdirSync(imagePath, { recursive: true });
 
         const base64Data = imageUrl.split(',')[1];
@@ -1573,7 +1791,7 @@ app.post('/api/bot/delete', ensureAuth, (req, res) => {
   }
 });
 
-app.use('/uploads', express.static(path.join(dataDir, 'uploads')));
+app.use('/uploads', express.static(uploadsDir));
 
 app.get('/api/admin/keys', ensureCanGenerate, (req, res) => {
   const keys = db.getGeneratedKeys();
@@ -1623,6 +1841,75 @@ app.post('/api/admin/whitelist/remove', ensureAdmin, (req, res) => {
 
   db.removeFromWhitelist(userId);
   res.json({ success: true });
+});
+
+// ============ USER REVOKE ADMIN ENDPOINTS (NEW) ============
+
+app.post('/api/admin/users/revoke', ensureAdmin, (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ success: false, error: 'No user ID provided' });
+
+    // Prevent revoking owners
+    if (ADMIN_IDS.includes(userId)) {
+      return res.status(403).json({ success: false, error: 'Cannot revoke an admin/owner account' });
+    }
+
+    db.revokeUser(userId);
+    res.json({ success: true, message: `User ${userId} has been revoked. All bots stopped and access removed.` });
+  } catch (err) {
+    console.error('[USER REVOKE ERROR]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/users/unrevoke', ensureAdmin, (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ success: false, error: 'No user ID provided' });
+
+    db.unrevokeUser(userId);
+    res.json({ success: true, message: `User ${userId} has been unrevoked. They can now purchase or redeem a key.` });
+  } catch (err) {
+    console.error('[USER UNREVOKE ERROR]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/admin/users/revoked', ensureAdmin, (req, res) => {
+  try {
+    const revokedUsers = db.getRevokedUsers();
+    // Also enrich with current user data if available
+    const enriched = revokedUsers.map(r => {
+      const userData = db.getUser(r.userId);
+      return {
+        ...r,
+        currentUsername: userData.username || 'Unknown',
+        currentPlan: userData.plan || null
+      };
+    });
+    res.json({ success: true, revokedUsers: enriched });
+  } catch (err) {
+    console.error('[GET REVOKED USERS ERROR]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/admin/users/check-revoked/:userId', ensureAdmin, (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const isRevoked = db.isUserRevoked(userId);
+    const userData = db.getUser(userId);
+    res.json({
+      success: true,
+      userId,
+      isRevoked,
+      keyRevoked: userData.key_revoked || false,
+      plan: userData.plan || null
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 app.get('/api/account-status', ensureAuth, (req, res) => {
@@ -1720,12 +2007,15 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`[Veiled Adv] Server running on port ${PORT}`);
-  console.log('[LTC] Wallet using litecoinspace.org (no API key needed)');
+  console.log(`[LTC] Wallet using litecoinspace.org (no API key needed)`);
   console.log(`[LTC] Owner sweep address: ${OWNER_LTC_ADDRESS || 'NOT SET'}`);
-  console.log('[LTC] Payment check interval: every 10 seconds');
-  console.log('[LTC] Sweep retry interval: every 60 seconds (10 minute max)');
+  console.log(`[LTC] Payment check interval: every 10 seconds`);
+  console.log(`[LTC] Sweep retry interval: every 60 seconds (10 minute max)`);
+  console.log(`[WEBHOOK] Purchase notifications: ${PURCHASE_WEBHOOK_URL ? 'ENABLED' : 'DISABLED'}`);
+  console.log(`[DB] Railway volume path: ${dataDir}`);
   console.log(`[ACCOUNTS] Slot pricing: $${SLOT_PRICE} per additional account`);
   console.log('[ACCOUNTS] v1=1 base + up to 4 purchased, v2=3 base + up to 2 purchased, v3=5 base');
+  console.log('[ADMIN] User revoke endpoints enabled');
 
   startupBalanceCheck()
     .then(() => {
